@@ -1,0 +1,11 @@
+# Ignorar carpetas de dependencias
+node_modules/
+**/node_modules/
+
+# Ignorar variables de entorno
+.env
+
+# Ignorar logs y archivos temporales
+npm-debug.log
+dist/
+.DS_Store

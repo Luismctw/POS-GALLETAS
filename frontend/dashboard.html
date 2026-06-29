@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Galletas - Panel de Administración</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+    <div class="sidebar">
+        <h2>🍪 Admin POS</h2>
+        <a id="nav-pedidos" class="active" onclick="cambiarVista('pedidos')">📦 Asignar Pedidos</a>
+        <a id="nav-clientes" onclick="cambiarVista('clientes')">👥 Clientes</a>
+        <a id="nav-repartidores" onclick="cambiarVista('repartidores')">🛵 Repartidores</a>
+        <a id="nav-produccion" onclick="cambiarVista('produccion')">🏭 Producción</a>
+        <a id="nav-balance" onclick="cambiarVista('balance')">📊 Balance</a>
+    </div>
+
+    <div class="main-content">
+        
+        <div id="vista-pedidos" class="vista activa">
+            <div class="header"><h1>Gestión y Monitoreo de Pedidos</h1><p>Asigna nuevos pedidos intuitivamente y vigila su estatus en tiempo real.</p></div>
+            <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+                <div class="card" style="flex: 1; min-width: 300px;">
+                    <h3>🚚 Nueva Venta / Asignación</h3>
+                    <form id="form-pedido">
+                        <div class="form-group"><label>Cliente:</label><select id="cliente_id" required><option value="">Cargando clientes...</option></select></div>
+                        <div class="form-group"><label>Repartidor:</label><select id="repartidor_id" required><option value="">Cargando repartidores...</option></select></div>
+                        <div class="form-group"><label>Total ($):</label><input type="number" id="total" step="0.01" required></div>
+                        <button type="submit">Guardar y Asignar</button>
+                    </form>
+                    <div id="mensaje-pedido" class="mensaje"></div>
+                </div>
+                <div class="table-container" style="flex: 2; min-width: 400px;">
+                    <h3 style="margin-bottom: 15px; color: var(--primary);">📡 Monitor en Tiempo Real</h3>
+                    <table>
+                        <thead><tr><th>Folio</th><th>Cliente</th><th>Repartidor</th><th>Total</th><th>Estatus</th><th>Acción</th></tr></thead>
+                        <tbody id="tabla-pedidos-monitor"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="vista-clientes" class="vista">
+            <div class="header"><h1>Directorio de Clientes</h1></div>
+            <div class="card" style="background-color: #f8fafc; border-left: 4px solid var(--primary);">
+                <h3>➕ Registrar Nuevo Cliente</h3>
+                <form id="form-nuevo-cliente" style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+                    <div class="form-group" style="flex: 1; min-width: 200px;"><label>Nombre Comercial:</label><input type="text" id="nuevo_nombre" required></div>
+                    <div class="form-group" style="flex: 2; min-width: 250px;"><label>Dirección de Entrega:</label><input type="text" id="nueva_direccion" required></div>
+                    <div class="form-group" style="flex: 1; min-width: 150px;"><label>Teléfono:</label><input type="text" id="nuevo_telefono"></div>
+                    <div class="form-group" style="flex: 1; min-width: 150px;"><label>Límite de Crédito ($):</label><input type="number" id="nuevo_limite" step="0.01" required></div>
+                    <button type="submit" style="width: auto; padding: 10px 20px; height: 42px; margin-bottom: 15px;">Guardar</button>
+                </form>
+                <div id="mensaje-nuevo-cliente" class="mensaje"></div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>ID</th><th>Nombre</th><th>Dirección</th><th>Límite</th><th>Deuda</th><th>Estatus</th></tr></thead>
+                    <tbody id="tabla-clientes"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="vista-repartidores" class="vista">
+            <div class="header"><h1>Gestión de Repartidores</h1><p>Agrega a tus repartidores de confianza y asígnales un PIN de acceso a la app.</p></div>
+            <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+                <div class="card" style="flex: 1; min-width: 300px; border-left: 4px solid var(--primary);">
+                    <h3>➕ Registrar Nuevo Repartidor</h3>
+                    <form id="form-repartidor">
+                        <div class="form-group"><label>Nombre del Repartidor:</label><input type="text" id="rep_nombre" placeholder="Ej. Carlos" required></div>
+                        <div class="form-group"><label>PIN de Acceso (4 dígitos):</label><input type="password" id="rep_pin" maxlength="4" placeholder="Ej. 5678" inputmode="numeric" required></div>
+                        <button type="submit">Guardar Repartidor</button>
+                    </form>
+                    <div id="mensaje-repartidor" class="mensaje"></div>
+                </div>
+                <div class="table-container" style="flex: 2; min-width: 400px;">
+                    <h3 style="margin-bottom: 15px; color: var(--primary);">🛵 Equipo Activo</h3>
+                    <table>
+                        <thead><tr><th>ID</th><th>Nombre</th><th>Estatus</th></tr></thead>
+                        <tbody id="tabla-repartidores"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="vista-produccion" class="vista">
+            <div class="header"><h1>Producción e Inventario</h1><p>Crea recetas, registra cajas horneadas o anota las compras de ingredientes.</p></div>
+            <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+                
+                <div style="flex: 1; min-width: 350px;">
+                    <div class="card" style="border-left: 4px solid #8b5cf6;">
+                        <h3 style="color: #8b5cf6;">🍪 Crear Nuevo Producto</h3>
+                        <form id="form-nuevo-producto">
+                            <div style="display: flex; gap: 10px;">
+                                <div class="form-group" style="flex: 2;"><label>Nombre del Producto:</label><input type="text" id="nuevo_prod_nombre" placeholder="Ej. Galletas Vainilla" required></div>
+                                <div class="form-group" style="flex: 1;"><label>Precio Caja ($):</label><input type="number" id="nuevo_prod_precio" step="0.01" required></div>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                                <div class="form-group" style="flex: 1; margin: 0;">
+                                    <label>Tipo de Producto:</label>
+                                    <select id="nuevo_prod_tipo" style="background-color: #f8fafc;">
+                                        <option value="propio">Producto Propio (Lleva receta)</option>
+                                        <option value="tercero">De Terceros (Solo reventa)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="flex: 1; margin: 0;">
+                                    <label>Asignar a Bodega:</label>
+                                    <select id="nuevo_prod_bodega" style="background-color: #f8fafc;">
+                                        <option value="1">Bodega 1 (Principal)</option>
+                                        <option value="2">Bodega 2 (Ventas)</option>
+                                        <option value="3">Bodega 3 (Tránsito)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                                <h4 style="margin-bottom: 10px;">Ingredientes (Dejar vacío si es de terceros)</h4>
+                                <div style="display: flex; gap: 10px; align-items: flex-end;">
+                                    <div class="form-group" style="flex: 2; margin: 0;"><select id="nuevo_prod_insumo"><option value="">Cargando ingredientes...</option></select></div>
+                                    <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="nuevo_prod_cantidad" step="0.01" placeholder="Cantidad"></div>
+                                    <button type="button" onclick="agregarIngredienteAReceta()" style="background: #64748b; width: auto; padding: 10px;">Añadir</button>
+                                </div>
+                                <ul id="lista-ingredientes-receta" style="margin-top: 15px; padding-left: 20px; color: #475569; font-weight: bold;"></ul>
+                            </div>
+                            <button type="submit" style="background-color: #8b5cf6;">Guardar Producto en Bodega</button>
+                        </form>
+                        <div id="mensaje-nuevo-producto" class="mensaje"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3>🏭 Registrar Horneado (Reporte de Insumos)</h3>
+                        <form id="form-produccion">
+                            <div style="display: flex; gap: 10px;">
+                                <div class="form-group" style="flex: 2;">
+                                    <label>Producto a hornear:</label>
+                                    <select id="prod_producto_id" required>
+                                        <option value="1">Galletas Vainilla (Ejemplo)</option>
+                                        </select>
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <label>Cajas producidas:</label>
+                                    <input type="number" id="prod_cajas" required>
+                                </div>
+                            </div>
+
+                            <div style="background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #fde68a;">
+                                <h4 style="margin-bottom: 10px; color: #d97706;">Ingredientes utilizados en este lote:</h4>
+                                <div style="display: flex; gap: 10px; align-items: flex-end;">
+                                    <div class="form-group" style="flex: 2; margin: 0;">
+                                        <select id="prod_insumo_usado">
+                                            <option value="">Cargando ingredientes...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="flex: 1; margin: 0;">
+                                        <input type="number" id="prod_cantidad_usada" step="0.01" placeholder="Cantidad">
+                                    </div>
+                                    <button type="button" onclick="agregarInsumoAlHorneado()" style="background: #d97706; width: auto; padding: 10px;">Añadir</button>
+                                </div>
+                                <ul id="lista-insumos-horneado" style="margin-top: 15px; padding-left: 20px; color: #475569; font-weight: bold;"></ul>
+                            </div>
+
+                            <button type="submit" id="btn-produccion" style="background-color: #16a34a;">Registrar y Descontar Almacén</button>
+                        </form>
+                        <div id="mensaje-produccion" class="mensaje"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3 style="color: #16a34a;">Registrar Compra de Ingredientes</h3>
+                        <form id="form-entrada-insumo">
+                            <div class="form-group"><label>Selecciona el Insumo Comprado:</label><select id="insumo_comprado_id" required><option value="">Cargando ingredientes...</option></select></div>
+                            <div class="form-group"><label>Cantidad Comprada (ej. kg):</label><input type="number" id="cantidad_comprada" step="0.01" required></div>
+                            <button type="submit" class="btn-success">Sumar al Almacén</button>
+                        </form>
+                        <div id="mensaje-insumo" class="mensaje"></div>
+                    </div>
+                </div>
+
+                <div class="table-container" style="flex: 1; min-width: 300px;">
+                    <h3 style="margin-bottom: 15px; color: #2563eb;">Almacén Actual</h3>
+                    <table>
+                        <thead><tr><th>ID</th><th>Insumo</th><th>Stock Disponible</th></tr></thead>
+                        <tbody id="tabla-insumos"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="vista-balance" class="vista">
+            <div class="header"><h1>Balance Financiero del Día</h1><p>Utilidad calculada cruzando los pedidos cobrados hoy contra los gastos de los repartidores.</p></div>
+            <div class="balance-grid">
+                <div class="stat-card"><h3>Ingresos Totales (Cobrado)</h3><div class="monto" id="balance-ingresos" style="color: #2563eb;">$0.00</div></div>
+                <div class="stat-card"><h3>Gastos Operativos (Repartidores)</h3><div class="monto" id="balance-egresos" style="color: #d97706;">$0.00</div></div>
+                <div class="stat-card"><h3>Utilidad Neta (Ganancia Libre)</h3><div class="monto" id="balance-utilidad">$0.00</div></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
