@@ -2,12 +2,18 @@ const API = location.protocol.startsWith('http') ? '/api' : 'http://localhost:30
 
 // ====================== AUTH ADMIN ======================
 const _origFetch = window.fetch.bind(window);
-window.fetch = (url, opts = {}) => {
+window.fetch = async (url, opts = {}) => {
     if (typeof url === 'string' && url.includes('/api/')) {
         const token = localStorage.getItem('admin_token');
         if (token) opts.headers = { ...opts.headers, 'Authorization': `Bearer ${token}` };
     }
-    return _origFetch(url, opts);
+    const res = await _origFetch(url, opts);
+    if (res.status === 401 && typeof url === 'string' && url.includes('/api/') && !url.includes('/admin/login')) {
+        localStorage.removeItem('admin_token');
+        document.getElementById('login-overlay').style.display = 'flex';
+        document.getElementById('login-error').textContent = 'Sesión expirada. Vuelve a iniciar sesión.';
+    }
+    return res;
 };
 
 async function hacerLogin() {
@@ -40,6 +46,11 @@ function abrirModal(id) {
     document.getElementById(id).style.display = 'flex';
 }
 
+// Escapa caracteres HTML para evitar XSS al inyectar en innerHTML
+function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 // Utilidad para mostrar mensajes
 function msg(el, ok, texto) {
     el.className = 'mensaje ' + (ok ? 'exito' : 'error');
@@ -56,7 +67,7 @@ function cambiarVista(vista) {
     document.getElementById(`nav-${vista}`).classList.add('active');
 
     const cargadores = {
-        crear: () => { cargarClientesSelect(); cargarCreadosResumen(); },
+        crear: () => { cargarClientesSelect(); cargarCreadosResumen(); cargarContenidosSugeridos(); cargarSelectorBodega(); },
         asignar: () => { cargarPedidosPorAsignar(); cargarPedidosMonitor(); },
         prioridad: cargarPrioridad,
         materia: cargarInsumos,
@@ -80,6 +91,111 @@ async function cargarClientesSelect() {
         const sel = document.getElementById('cliente_id');
         sel.innerHTML = '<option value="">Selecciona un cliente...</option>';
         clientes.forEach(c => sel.innerHTML += `<option value="${c.id}">${c.nombre}</option>`);
+    } catch (e) { console.error(e); }
+}
+
+// ---- PICKER DE PRODUCTOS EN BODEGA para Crear Pedido ----
+let _productosPedido = []; // carrito temporal
+
+// Solo refresca el <select> del picker sin tocar el carrito
+async function cargarSelectorBodega() {
+    try {
+        const prods = await (await fetch(`${API}/produccion/productos`)).json();
+        const sel = document.getElementById('prod-bodega-sel');
+        const disponibles = prods.filter(p => p.stock_actual > 0);
+        if (disponibles.length === 0) {
+            sel.innerHTML = '<option value="">Sin stock en bodegas</option>';
+        } else {
+            sel.innerHTML = '<option value="">Selecciona producto...</option>' +
+                disponibles.map(p =>
+                    `<option value="${p.id}" data-precio="${esc(p.precio_caja)}" data-stock="${esc(p.stock_actual)}" data-nombre="${esc(p.nombre)}">
+                        ${esc(p.nombre)} — Bodega ${esc(p.bodega_asignada)} (${esc(p.stock_actual)} cajas)
+                    </option>`
+                ).join('');
+        }
+    } catch (e) { console.error(e); }
+}
+
+// Limpia el carrito y recarga el selector (solo en submit exitoso)
+async function cargarProductosBodega() {
+    _productosPedido = [];
+    actualizarListaPedido();
+    await cargarSelectorBodega();
+}
+
+function agregarProductoPedido() {
+    const sel = document.getElementById('prod-bodega-sel');
+    const qty = parseInt(document.getElementById('prod-bodega-qty').value) || 1;
+    const opt = sel.options[sel.selectedIndex];
+    if (!sel.value) return;
+
+    const id    = parseInt(sel.value);
+    const nombre = opt.dataset.nombre;
+    const precio = parseFloat(opt.dataset.precio);
+    const stock  = parseInt(opt.dataset.stock);
+
+    const existente = _productosPedido.find(p => p.id === id);
+    const yaAgregado = existente ? existente.qty : 0;
+    if (yaAgregado + qty > stock) {
+        alert(`Solo hay ${stock} cajas de ${nombre} disponibles.`);
+        return;
+    }
+    if (existente) {
+        existente.qty += qty;
+    } else {
+        _productosPedido.push({ id, nombre, qty, precio });
+    }
+    actualizarListaPedido();
+}
+
+function quitarProductoPedido(id) {
+    _productosPedido = _productosPedido.filter(p => p.id !== id);
+    actualizarListaPedido();
+}
+
+function actualizarListaPedido() {
+    const ul = document.getElementById('lista-prod-pedido');
+    if (!ul) return;
+    if (_productosPedido.length === 0) {
+        ul.innerHTML = '';
+        return;
+    }
+    ul.innerHTML = _productosPedido.map(p =>
+        `<li style="display:flex; justify-content:space-between; align-items:center; background:#fff; border-radius:6px; padding:5px 10px; margin-bottom:4px; font-size:0.88rem;">
+            <span><strong>${esc(p.qty)}</strong> cajas de <strong>${esc(p.nombre)}</strong> — $${(p.qty * p.precio).toFixed(2)}</span>
+            <button type="button" onclick="quitarProductoPedido(${p.id})" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:1rem;">✕</button>
+        </li>`
+    ).join('');
+
+    // Auto-rellenar contenido, piezas y total
+    const contenido = _productosPedido.map(p => `${p.qty} cajas ${p.nombre}`).join(' + ');
+    const total     = _productosPedido.reduce((s, p) => s + p.qty * p.precio, 0);
+    const piezas    = _productosPedido.reduce((s, p) => s + p.qty, 0);
+
+    document.getElementById('contenido').value = contenido;
+    document.getElementById('total').value     = total.toFixed(2);
+    document.getElementById('piezas').value    = piezas;
+}
+
+async function cambiarBodegaInsumo(id) {
+    const sel = document.getElementById(`bodega-sel-${id}`);
+    const ubicacion = sel.value;
+    try {
+        const res = await fetch(`${API}/produccion/insumos/${id}/bodega`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ubicacion })
+        });
+        if (res.ok) { cargarInsumos(); }
+        else { alert('Error al actualizar bodega'); }
+    } catch (e) { alert('Sin conexión al servidor'); }
+}
+
+async function cargarContenidosSugeridos() {
+    try {
+        const contenidos = await (await fetch(`${API}/pedidos/contenidos`)).json();
+        const dl = document.getElementById('lista-contenidos');
+        dl.innerHTML = contenidos.map(c => `<option value="${c}">`).join('');
     } catch (e) { console.error(e); }
 }
 
@@ -107,7 +223,7 @@ document.getElementById('form-pedido').addEventListener('submit', async (e) => {
         const res = await fetch(`${API}/pedidos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const data = await res.json();
         msg(el, res.ok, data.mensaje);
-        if (res.ok) { e.target.reset(); cargarCreadosResumen(); }
+        if (res.ok) { e.target.reset(); _productosPedido = []; actualizarListaPedido(); cargarProductosBodega(); cargarCreadosResumen(); cargarContenidosSugeridos(); }
     } catch (err) { msg(el, false, 'Error de conexión'); }
 });
 
@@ -181,12 +297,43 @@ async function entregarAdmin(id) {
 }
 
 async function cerrarDia() {
-    if (!confirm('¿Cerrar el día?\nTodos los pedidos pendientes se reagendarán automáticamente para hoy.')) return;
+    // Obtener resumen previo antes de confirmar
+    try {
+        const [pendRes, prioRes] = await Promise.all([
+            fetch(`${API}/pedidos`),
+            fetch(`${API}/pedidos/prioritarios`)
+        ]);
+        const pedidos   = await pendRes.json();
+        const prioridad = await prioRes.json();
+
+        const pendientes   = pedidos.filter(p => p.estatus === 'pendiente').length;
+        const sinAsignar   = pedidos.filter(p => p.estatus === 'creado').length;
+        const conAtraso    = prioridad.length;
+
+        let dialogo = '¿Cerrar el día?\n\n';
+        dialogo += `📦 Pedidos pendientes de entregar hoy: ${pendientes}\n`;
+        if (sinAsignar > 0)  dialogo += `⚠️  Pedidos sin asignar a repartidor: ${sinAsignar}\n`;
+        if (conAtraso > 0)   dialogo += `🔴 Pedidos atrasados o reagendados: ${conAtraso}\n`;
+        dialogo += '\nLos pedidos pendientes se reagendarán para mañana.';
+
+        if (!confirm(dialogo)) return;
+    } catch {
+        if (!confirm('¿Cerrar el día? Los pedidos pendientes se reagendarán para mañana.')) return;
+    }
+
     try {
         const res  = await fetch(`${API}/admin/cerrar-dia`, { method: 'POST' });
         const data = await res.json();
-        alert(data.mensaje);
-        if (res.ok) { cargarPedidosMonitor(); cargarPedidosPorAsignar(); }
+
+        if (!res.ok) { alert(`Error al cerrar el día: ${data.mensaje || res.status}`); return; }
+
+        let resultado = '✅ Día cerrado.\n\n';
+        resultado += `🔄 Reagendados para mañana: ${data.reagendados}\n`;
+        if (data.sin_asignar > 0)    resultado += `📋 Pendientes sin asignar: ${data.sin_asignar}\n`;
+        if (data.ya_reagendados > 0) resultado += `⚠️  Ya llevaban días reagendados: ${data.ya_reagendados}\n`;
+
+        alert(resultado);
+        cargarPedidosMonitor(); cargarPedidosPorAsignar(); cargarPrioridad();
     } catch { alert('Error de conexión'); }
 }
 
@@ -281,9 +428,19 @@ async function cargarInsumos() {
                 ? '<span style="background:#fee2e2; color:#dc2626; padding:4px 10px; border-radius:10px; font-weight:bold;">⚠️ STOCK BAJO</span>'
                 : '<span style="background:#dcfce7; color:#166534; padding:4px 10px; border-radius:10px; font-weight:bold;">OK</span>';
             const fmt = n => Number.isInteger(n) ? n : parseFloat(n.toFixed(2));
+            const bodegas = ['Bodega Materia Prima','Bodega 1','Bodega 2','Bodega 3','Bodega de Tránsito'];
+            const opsBodega = bodegas.map(b =>
+                `<option value="${b}" ${b === (i.ubicacion || 'Bodega Materia Prima') ? 'selected' : ''}>${b}</option>`
+            ).join('');
             tbody.innerHTML += `<tr style="${bajo ? 'background:#fff5f5;' : ''}">
-                <td>${i.id}</td><td><strong>${i.nombre}</strong></td><td><small>${i.ubicacion || '-'}</small></td>
-                <td>${fmt(stock)} ${i.unidad_medida}</td><td>${fmt(minimo)} ${i.unidad_medida}</td><td>${estado}</td></tr>`;
+                <td>${i.id}</td><td><strong>${i.nombre}</strong></td>
+                <td><small>${i.ubicacion || '-'}</small></td>
+                <td>${fmt(stock)} ${i.unidad_medida}</td><td>${fmt(minimo)} ${i.unidad_medida}</td>
+                <td>${estado}</td>
+                <td style="white-space:nowrap;">
+                    <select id="bodega-sel-${i.id}" style="font-size:0.8rem; padding:3px 6px; border-radius:6px; border:1px solid #cbd5e1;">${opsBodega}</select>
+                    <button onclick="cambiarBodegaInsumo(${i.id})" style="margin-left:4px; padding:3px 8px; font-size:0.78rem; background:#3b82f6; color:#fff; border:none; border-radius:6px; cursor:pointer;">Mandar</button>
+                </td></tr>`;
         });
         const badge = document.getElementById('stock-bajo-badge');
         if (badge) {
@@ -306,7 +463,7 @@ document.getElementById('form-insumo').addEventListener('submit', async (e) => {
         const res = await fetch(`${API}/produccion/insumos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const data = await res.json();
         msg(el, res.ok, data.mensaje);
-        if (res.ok) { e.target.reset(); document.getElementById('insumo_unidad').value = 'kg'; document.getElementById('insumo_ubicacion').value = 'Bodega Materia Prima'; cargarInsumos(); }
+        if (res.ok) { e.target.reset(); document.getElementById('insumo_unidad').value = 'kg'; document.getElementById('insumo_ubicacion').value = 'Bodega Materia Prima'; cargarInsumos(); cargarContenidosSugeridos(); }
     } catch (err) { msg(el, false, 'Error de conexión'); }
 });
 
@@ -584,10 +741,10 @@ async function cargarClientes() {
                 <td style="font-weight:bold; color:${deuda > 0 ? '#dc2626' : '#16a34a'};">$${deuda.toFixed(2)}</td>
                 <td><span style="background:${bloqueado ? '#fee2e2' : '#dcfce7'}; color:${bloqueado ? '#dc2626' : '#16a34a'}; padding:2px 8px; border-radius:10px; font-size:0.8rem; font-weight:bold;">${c.estatus}</span></td>
                 <td style="white-space:nowrap;">
-                    <button onclick="abrirEditarCliente(${c.id},'${c.nombre.replace(/'/g,"\\'")}','${(c.direccion||'').replace(/'/g,"\\'")}','${(c.telefono||'').replace(/'/g,"\\'")}',${c.limite_credito})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px;">✏️ Editar</button>
-                    <button onclick="toggleBloqueoCliente(${c.id},'${c.nombre.replace(/'/g,"\\'")}')" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:${bloqueado ? '#16a34a' : '#dc2626'};">${bloqueado ? '🔓 Desbloquear' : '🔒 Bloquear'}</button>
-                    ${deuda > 0 ? `<button onclick="cobrarCliente(${c.id},'${c.nombre.replace(/'/g,"\\'")}')" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:#2563eb;">💰 Cobrar</button>` : ''}
-                    <button onclick="verHistorial(${c.id},'${c.nombre.replace(/'/g,"\\'")}')" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:#64748b;">📋 Historial</button>
+                    <button onclick="abrirEditarCliente(${c.id},${esc(JSON.stringify(c.nombre))},${esc(JSON.stringify(c.direccion||''))},${esc(JSON.stringify(c.telefono||''))},${c.limite_credito})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px;">✏️ Editar</button>
+                    <button onclick="toggleBloqueoCliente(${c.id},${esc(JSON.stringify(c.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:${bloqueado ? '#16a34a' : '#dc2626'};">${bloqueado ? '🔓 Desbloquear' : '🔒 Bloquear'}</button>
+                    ${deuda > 0 ? `<button onclick="cobrarCliente(${c.id},${esc(JSON.stringify(c.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:#2563eb;">💰 Cobrar</button>` : ''}
+                    <button onclick="verHistorial(${c.id},${esc(JSON.stringify(c.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:#64748b;">📋 Historial</button>
                 </td>
             </tr>`;
         });
@@ -688,8 +845,8 @@ async function cargarRepartidores() {
                 <td><strong>${r.nombre}</strong></td>
                 <td><span style="background:${activo ? '#dcfce7' : '#f1f5f9'}; color:${activo ? '#16a34a' : '#64748b'}; padding:2px 8px; border-radius:10px; font-size:0.8rem; font-weight:bold;">${r.estatus}</span></td>
                 <td style="white-space:nowrap;">
-                    <button onclick="abrirEditarRep(${r.id},'${r.nombre.replace(/'/g,"\\'")}')" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px;">✏️ Editar</button>
-                    <button onclick="toggleRepartidor(${r.id},'${r.nombre.replace(/'/g,"\\'")}')" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:${activo ? '#dc2626' : '#16a34a'};">${activo ? '⛔ Desactivar' : '✅ Activar'}</button>
+                    <button onclick="abrirEditarRep(${r.id},${esc(JSON.stringify(r.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px;">✏️ Editar</button>
+                    <button onclick="toggleRepartidor(${r.id},${esc(JSON.stringify(r.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:${activo ? '#dc2626' : '#16a34a'};">${activo ? '⛔ Desactivar' : '✅ Activar'}</button>
                 </td>
             </tr>`;
         });
@@ -791,7 +948,7 @@ async function cargarControlCarga() {
                                 : `<span style="background:#f1f5f9; color:#64748b; padding:4px 10px; border-radius:8px;">Sin registrar</span>`}
                     </td>
                     <td style="text-align:center;">
-                        <button onclick="abrirRegistroRetorno(${r.id}, '${r.repartidor}', '${fecha}', ${r.esperado_regreso})"
+                        <button onclick="abrirRegistroRetorno(${r.id}, ${esc(JSON.stringify(r.repartidor))}, ${esc(JSON.stringify(fecha))}, ${r.esperado_regreso})"
                             style="width:auto; padding:6px 14px; font-size:0.82rem; background:#2563eb;">
                             ${r.retorno_registrado ? 'Editar' : 'Registrar regreso'}
                         </button>

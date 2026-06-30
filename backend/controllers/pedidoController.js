@@ -102,6 +102,7 @@ const obtenerPedidos = async (req, res) => {
             FROM pedidos p
             JOIN clientes c ON p.cliente_id = c.id
             LEFT JOIN repartidores r ON p.repartidor_id = r.id
+            WHERE p.estatus != 'reagendado'
             ORDER BY p.fecha DESC, p.id DESC
         `);
         res.json(pedidos);
@@ -124,9 +125,9 @@ const obtenerPedidosPrioritarios = async (req, res) => {
             FROM pedidos p
             JOIN clientes c ON p.cliente_id = c.id
             LEFT JOIN repartidores r ON p.repartidor_id = r.id
-            WHERE p.estatus IN ('creado','pendiente','reagendado')
-              AND DATEDIFF(CURDATE(), p.fecha_creacion) >= 1
-            ORDER BY dias_atraso DESC, p.veces_reagendado DESC
+            WHERE p.estatus IN ('creado','pendiente')
+              AND (p.fecha < CURDATE() OR p.veces_reagendado > 0)
+            ORDER BY p.veces_reagendado DESC, dias_atraso DESC
         `);
         // Etiqueta de prioridad según antigüedad
         pedidos.forEach(p => {
@@ -283,6 +284,23 @@ const obtenerFrecuenciaCompra = async (req, res) => {
     }
 };
 
+// Contenidos usados anteriormente (para autocompletado)
+const obtenerContenidos = async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT contenido, COUNT(*) AS veces
+            FROM pedidos
+            WHERE contenido IS NOT NULL AND contenido != ''
+            GROUP BY contenido
+            ORDER BY veces DESC
+            LIMIT 50
+        `);
+        res.json(rows.map(r => r.contenido));
+    } catch (e) {
+        res.status(500).json({ mensaje: 'Error interno' });
+    }
+};
+
 // Control de carga del día por repartidor
 const obtenerControlCarga = async (req, res) => {
     const fecha = req.params.fecha || new Date().toISOString().split('T')[0];
@@ -382,5 +400,6 @@ module.exports = {
     obtenerFrecuenciaCompra,
     obtenerControlCarga,
     registrarRetorno,
-    cancelarPedido
+    cancelarPedido,
+    obtenerContenidos
 };

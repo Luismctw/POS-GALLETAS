@@ -58,9 +58,23 @@ app.use('/api/deudas-negocio', adminAuth, require('./routes/deudaNegocioRoutes')
 // Endpoint manual "Cerrar el día"
 app.post('/api/admin/cerrar-dia', adminAuth, async (req, res) => {
     try {
-        const count = await autoReagendarPendientes();
-        res.json({ mensaje: `Día cerrado. ${count} pedido(s) reagendados para mañana.`, reagendados: count });
+        // Contar pendientes ANTES de cerrar para el resumen
+        const [[{ sin_asignar }]] = await db.query(
+            "SELECT COUNT(*) AS sin_asignar FROM pedidos WHERE estatus = 'creado'"
+        );
+        const [[{ ya_reagendados }]] = await db.query(
+            "SELECT COUNT(*) AS ya_reagendados FROM pedidos WHERE estatus = 'pendiente' AND veces_reagendado > 0"
+        );
+
+        const reagendados = await autoReagendarPendientes();
+
+        res.json({
+            reagendados,
+            sin_asignar: Number(sin_asignar),
+            ya_reagendados: Number(ya_reagendados)
+        });
     } catch (e) {
+        console.error('Error al cerrar el día:', e);
         res.status(500).json({ mensaje: 'Error al cerrar el día' });
     }
 });

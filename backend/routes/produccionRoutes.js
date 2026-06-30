@@ -7,12 +7,14 @@ const {
     obtenerProductosConReceta,
     crearProductoConReceta,
     producirPorReceta,
-    registrarEntradaTerceros
+    registrarEntradaTerceros,
+    actualizarBodegaInsumo
 } = require('../controllers/produccionController');
 
 // Almacén de materia prima
 router.get('/insumos', obtenerInsumos);
 router.post('/insumos', crearInsumo);
+router.patch('/insumos/:id/bodega', actualizarBodegaInsumo);
 
 // Almacén de producto terminado
 router.get('/productos', obtenerProductos);

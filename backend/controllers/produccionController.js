@@ -38,6 +38,18 @@ const crearInsumo = async (req, res) => {
     }
 };
 
+const actualizarBodegaInsumo = async (req, res) => {
+    const { id } = req.params;
+    const { ubicacion } = req.body;
+    if (!ubicacion) return res.status(400).json({ mensaje: 'Bodega requerida' });
+    try {
+        await db.query('UPDATE insumos SET ubicacion = ? WHERE id = ?', [ubicacion, id]);
+        res.json({ mensaje: 'Bodega actualizada' });
+    } catch (e) {
+        res.status(500).json({ mensaje: 'Error interno' });
+    }
+};
+
 // =====================================================================
 //  ALMACÉN DE PRODUCTO TERMINADO (productos)
 // =====================================================================
@@ -216,5 +228,6 @@ module.exports = {
     obtenerProductosConReceta,
     crearProductoConReceta,
     producirPorReceta,
-    registrarEntradaTerceros
+    registrarEntradaTerceros,
+    actualizarBodegaInsumo
 };

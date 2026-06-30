@@ -13,14 +13,16 @@ const {
     obtenerFrecuenciaCompra,
     obtenerControlCarga,
     registrarRetorno,
-    cancelarPedido
+    cancelarPedido,
+    obtenerContenidos
 } = require('../controllers/pedidoController');
 
 // Lectura (panel admin)
 router.get('/', obtenerPedidos);                       // monitor de todos los pedidos
 router.get('/creados', obtenerPedidosCreados);         // pendientes de asignar
 router.get('/prioritarios', obtenerPedidosPrioritarios); // reagendados/atrasados
-router.get('/frecuencia', obtenerFrecuenciaCompra);    // analítica de compra
+router.get('/frecuencia', obtenerFrecuenciaCompra);
+router.get('/contenidos', obtenerContenidos);    // analítica de compra
 router.get('/control-carga/:fecha', obtenerControlCarga);
 router.post('/retorno', registrarRetorno);
 
