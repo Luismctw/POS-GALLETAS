@@ -1,8 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { obtenerBalanceDashboard } = require('../controllers/balanceController');
+const {
+    obtenerBalanceDashboard,
+    obtenerBalancePeriodo,
+    obtenerTicketsBalance,
+    obtenerBalanceProduccion
+} = require('../controllers/balanceController');
 
-// Ruta: GET /api/balance/dashboard (Resumen financiero del día)
-router.get('/dashboard', obtenerBalanceDashboard);
+router.get('/dashboard', obtenerBalanceDashboard);          // balance rápido del día
+router.get('/', obtenerBalancePeriodo);                     // ?periodo=dia|semana|mes
+router.get('/tickets', obtenerTicketsBalance);              // ?periodo=...
+router.get('/produccion', obtenerBalanceProduccion);        // contabilidad de producción
 
 module.exports = router;

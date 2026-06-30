@@ -1,12 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { obtenerRepartidores, crearRepartidor, autenticarRepartidor } = require('../controllers/repartidorController');
+const { obtenerRepartidores, crearRepartidor, editarRepartidor, toggleRepartidor, autenticarRepartidor } = require('../controllers/repartidorController');
 
-// Rutas del Panel Admin
-router.get('/', obtenerRepartidores);
-router.post('/', crearRepartidor);
-
-// Ruta de la App Móvil (Login)
-router.post('/auth', autenticarRepartidor);
+router.get('/',                 obtenerRepartidores);
+router.post('/',                crearRepartidor);
+router.put('/:id',              editarRepartidor);
+router.patch('/:id/toggle',     toggleRepartidor);
+router.post('/auth',            autenticarRepartidor);
 
 module.exports = router;

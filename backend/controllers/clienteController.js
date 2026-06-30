@@ -1,71 +1,107 @@
 const db = require('../config/db');
 
-// Obtener todos los clientes
 const obtenerClientes = async (req, res) => {
     try {
-        const [clientes] = await db.query("SELECT * FROM clientes");
+        const [clientes] = await db.query("SELECT * FROM clientes ORDER BY nombre");
         res.json(clientes);
-    } catch (error) {
-        console.error("Error al obtener clientes:", error);
-        res.status(500).json({ mensaje: "Error interno del servidor" });
+    } catch (e) {
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 };
 
-// Registrar un abono/cobro a un cliente
+const obtenerDeudas = async (req, res) => {
+    try {
+        const [deudas] = await db.query(
+            `SELECT id, nombre, telefono, limite_credito, saldo_deudor,
+                    (limite_credito - saldo_deudor) AS credito_disponible
+             FROM clientes WHERE saldo_deudor > 0 ORDER BY saldo_deudor DESC`
+        );
+        const [tot] = await db.query("SELECT IFNULL(SUM(saldo_deudor),0) AS total_por_cobrar FROM clientes");
+        res.json({ total_por_cobrar: parseFloat(tot[0].total_por_cobrar).toFixed(2), deudas });
+    } catch (e) {
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
 const registrarCobro = async (req, res) => {
     const { id } = req.params;
-    const { monto_abono } = req.body;
-
-    if (!monto_abono || monto_abono <= 0) {
-        return res.status(400).json({ mensaje: "El monto del abono debe ser mayor a 0" });
-    }
-
+    const { monto_abono, notas } = req.body;
+    if (!monto_abono || monto_abono <= 0)
+        return res.status(400).json({ mensaje: 'El monto debe ser mayor a 0' });
     try {
-        await db.query("START TRANSACTION");
+        await db.query('START TRANSACTION');
+        const [cli] = await db.query('SELECT saldo_deudor FROM clientes WHERE id = ?', [id]);
+        if (!cli.length) { await db.query('ROLLBACK'); return res.status(404).json({ mensaje: 'Cliente no encontrado' }); }
 
-        // Obtener deuda actual
-        const [cliente] = await db.query("SELECT saldo_deudor FROM clientes WHERE id = ?", [id]);
-        if (cliente.length === 0) {
-            await db.query("ROLLBACK");
-            return res.status(404).json({ mensaje: "Cliente no encontrado" });
-        }
-
-        const nueva_deuda = cliente[0].saldo_deudor - monto_abono;
-        
-        // Actualizar saldo
+        const nuevo = Math.max(0, parseFloat(cli[0].saldo_deudor) - parseFloat(monto_abono));
+        await db.query('UPDATE clientes SET saldo_deudor = ? WHERE id = ?', [nuevo, id]);
         await db.query(
-            "UPDATE clientes SET saldo_deudor = ? WHERE id = ?",
-            [nueva_deuda < 0 ? 0 : nueva_deuda, id]
+            'INSERT INTO historial_cobros (cliente_id, monto, tipo, notas) VALUES (?, ?, "abono_admin", ?)',
+            [id, monto_abono, notas || null]
         );
-
-        await db.query("COMMIT");
-        res.json({ mensaje: "Abono registrado exitosamente" });
-
-    } catch (error) {
-        await db.query("ROLLBACK");
-        console.error("Error al registrar abono:", error);
-        res.status(500).json({ mensaje: "Error interno del servidor" });
+        await db.query('COMMIT');
+        res.json({ mensaje: 'Abono registrado exitosamente', saldo_nuevo: nuevo });
+    } catch (e) {
+        await db.query('ROLLBACK');
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 };
 
-// Crear un nuevo cliente
 const crearCliente = async (req, res) => {
     const { nombre, direccion, telefono, limite_credito } = req.body;
-
-    if (!nombre) {
-        return res.status(400).json({ mensaje: "El nombre es obligatorio" });
-    }
-
+    if (!nombre) return res.status(400).json({ mensaje: 'El nombre es obligatorio' });
     try {
         await db.query(
             "INSERT INTO clientes (nombre, direccion, telefono, limite_credito, saldo_deudor, estatus) VALUES (?, ?, ?, ?, 0.00, 'activo')",
             [nombre, direccion || '', telefono || '', limite_credito || 0]
         );
-        res.status(201).json({ mensaje: "Cliente guardado exitosamente" });
-    } catch (error) {
-        console.error("Error al crear cliente:", error);
-        res.status(500).json({ mensaje: "Error interno del servidor" });
+        res.status(201).json({ mensaje: 'Cliente guardado exitosamente' });
+    } catch (e) {
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 };
 
-module.exports = { obtenerClientes, registrarCobro, crearCliente };
+const editarCliente = async (req, res) => {
+    const { id } = req.params;
+    const { nombre, direccion, telefono, limite_credito } = req.body;
+    if (!nombre) return res.status(400).json({ mensaje: 'El nombre es obligatorio' });
+    try {
+        await db.query(
+            'UPDATE clientes SET nombre=?, direccion=?, telefono=?, limite_credito=? WHERE id=?',
+            [nombre, direccion || '', telefono || '', limite_credito || 0, id]
+        );
+        res.json({ mensaje: 'Cliente actualizado' });
+    } catch (e) {
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+const toggleBloqueo = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [cli] = await db.query('SELECT estatus FROM clientes WHERE id = ?', [id]);
+        if (!cli.length) return res.status(404).json({ mensaje: 'Cliente no encontrado' });
+        const nuevo = cli[0].estatus === 'activo' ? 'bloqueado' : 'activo';
+        await db.query('UPDATE clientes SET estatus = ? WHERE id = ?', [nuevo, id]);
+        res.json({ mensaje: `Cliente ${nuevo === 'bloqueado' ? 'bloqueado' : 'desbloqueado'}`, estatus: nuevo });
+    } catch (e) {
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+const obtenerHistorialCobros = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [rows] = await db.query(
+            `SELECT h.id, h.monto, h.tipo, h.notas,
+                    DATE_FORMAT(h.fecha, '%Y-%m-%d %H:%i') AS fecha
+             FROM historial_cobros h WHERE h.cliente_id = ? ORDER BY h.fecha DESC LIMIT 30`,
+            [id]
+        );
+        res.json(rows);
+    } catch (e) {
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+module.exports = { obtenerClientes, obtenerDeudas, registrarCobro, crearCliente, editarCliente, toggleBloqueo, obtenerHistorialCobros };

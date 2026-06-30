@@ -5,200 +5,481 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POS Galletas - Panel de Administración</title>
     <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="apple-touch-icon" href="/icon-192.png">
 </head>
 <body>
 
+    <!-- ============ LOGIN OVERLAY ============ -->
+    <div id="login-overlay" style="
+        display:flex; position:fixed; inset:0; z-index:9999;
+        background:linear-gradient(135deg,#1e40af,#3b82f6);
+        align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:16px; padding:40px 48px; max-width:360px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3); text-align:center;">
+            <div style="font-size:3rem; margin-bottom:8px;">🍪</div>
+            <h2 style="color:#1e40af; margin-bottom:4px;">POS Galletas</h2>
+            <p style="color:#64748b; margin-bottom:28px; font-size:0.9rem;">Panel de Administración</p>
+            <input type="password" id="login-password" placeholder="Contraseña de admin"
+                style="width:100%; padding:12px 16px; border:2px solid #e2e8f0; border-radius:8px; font-size:1rem; margin-bottom:16px; box-sizing:border-box;"
+                onkeydown="if(event.key==='Enter') hacerLogin()">
+            <button onclick="hacerLogin()" style="width:100%; padding:12px; background:#2563eb; color:#fff; border:none; border-radius:8px; font-size:1rem; font-weight:700; cursor:pointer;">
+                Entrar
+            </button>
+            <div id="login-error" style="color:#dc2626; margin-top:12px; font-size:0.88rem; min-height:20px;"></div>
+        </div>
+    </div>
+
+    <!-- ============ MODAL EDITAR CLIENTE ============ -->
+    <div id="modal-editar-cliente" style="display:none; position:fixed; inset:0; z-index:8000; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:12px; padding:32px; max-width:500px; width:90%; box-shadow:0 8px 40px rgba(0,0,0,0.2);">
+            <h3 style="margin-bottom:20px; color:#1e293b;">✏️ Editar Cliente</h3>
+            <input type="hidden" id="edit-cli-id">
+            <div class="form-group"><label>Nombre:</label><input type="text" id="edit-cli-nombre" required></div>
+            <div class="form-group"><label>Dirección:</label><input type="text" id="edit-cli-direccion"></div>
+            <div class="form-group"><label>Teléfono:</label><input type="text" id="edit-cli-telefono"></div>
+            <div class="form-group"><label>Límite de crédito ($):</label><input type="number" id="edit-cli-limite" step="0.01"></div>
+            <div style="display:flex; gap:12px; margin-top:20px;">
+                <button onclick="guardarEdicionCliente()" style="flex:1; padding:10px;">Guardar</button>
+                <button onclick="cerrarModal('modal-editar-cliente')" style="flex:1; padding:10px; background:#64748b;">Cancelar</button>
+            </div>
+            <div id="msg-edit-cliente" class="mensaje"></div>
+        </div>
+    </div>
+
+    <!-- ============ MODAL EDITAR REPARTIDOR ============ -->
+    <div id="modal-editar-rep" style="display:none; position:fixed; inset:0; z-index:8000; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:12px; padding:32px; max-width:400px; width:90%; box-shadow:0 8px 40px rgba(0,0,0,0.2);">
+            <h3 style="margin-bottom:20px; color:#1e293b;">✏️ Editar Repartidor</h3>
+            <input type="hidden" id="edit-rep-id">
+            <div class="form-group"><label>Nombre:</label><input type="text" id="edit-rep-nombre" required></div>
+            <div class="form-group"><label>Nuevo PIN (dejar vacío para no cambiar):</label><input type="password" id="edit-rep-pin" maxlength="4" inputmode="numeric" placeholder="****"></div>
+            <div style="display:flex; gap:12px; margin-top:20px;">
+                <button onclick="guardarEdicionRepartidor()" style="flex:1; padding:10px;">Guardar</button>
+                <button onclick="cerrarModal('modal-editar-rep')" style="flex:1; padding:10px; background:#64748b;">Cancelar</button>
+            </div>
+            <div id="msg-edit-rep" class="mensaje"></div>
+        </div>
+    </div>
+
+    <!-- ============ MODAL HISTORIAL COBROS ============ -->
+    <div id="modal-historial" style="display:none; position:fixed; inset:0; z-index:8000; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;">
+        <div style="background:#fff; border-radius:12px; padding:32px; max-width:560px; width:90%; box-shadow:0 8px 40px rgba(0,0,0,0.2);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="color:#1e293b;">📋 Historial de Cobros</h3>
+                <button onclick="cerrarModal('modal-historial')" style="width:auto; padding:6px 16px; background:#64748b;">Cerrar</button>
+            </div>
+            <p id="historial-cliente-nombre" style="color:#64748b; margin-bottom:16px;"></p>
+            <div class="table-container" style="box-shadow:none; padding:0; max-height:320px; overflow-y:auto;">
+                <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Notas</th></tr></thead>
+                <tbody id="tabla-historial-cobros"></tbody></table>
+            </div>
+        </div>
+    </div>
+
     <div class="sidebar">
         <h2>🍪 Admin POS</h2>
-        <a id="nav-pedidos" class="active" onclick="cambiarVista('pedidos')">📦 Asignar Pedidos</a>
+        <span class="nav-group">Pedidos</span>
+        <a id="nav-crear" class="active" onclick="cambiarVista('crear')">📝 Crear Pedido</a>
+        <a id="nav-asignar" onclick="cambiarVista('asignar')">🚚 Asignar y Monitor</a>
+        <a id="nav-prioridad" onclick="cambiarVista('prioridad')">⏰ Prioridad / Atrasados</a>
+        <a id="nav-control-carga" onclick="cambiarVista('control-carga')">📋 Control de Carga</a>
+        <span class="nav-group">Almacenes</span>
+        <a id="nav-materia" onclick="cambiarVista('materia')">📦 Materia Prima</a>
+        <a id="nav-terminado" onclick="cambiarVista('terminado')">🏬 Producto Terminado</a>
+        <a id="nav-produccion" onclick="cambiarVista('produccion')">🏭 Producción / Recetas</a>
+        <span class="nav-group">Dinero</span>
+        <a id="nav-compras" onclick="cambiarVista('compras')">🛒 Compras</a>
+        <a id="nav-contabilidad" onclick="cambiarVista('contabilidad')">💳 Contabilidad</a>
+        <a id="nav-deudas-negocio" onclick="cambiarVista('deudas-negocio')">🏦 Deudas del Negocio</a>
+        <span class="nav-group">Personas</span>
         <a id="nav-clientes" onclick="cambiarVista('clientes')">👥 Clientes</a>
         <a id="nav-repartidores" onclick="cambiarVista('repartidores')">🛵 Repartidores</a>
-        <a id="nav-produccion" onclick="cambiarVista('produccion')">🏭 Producción</a>
-        <a id="nav-balance" onclick="cambiarVista('balance')">📊 Balance</a>
+        <a id="nav-frecuencia" onclick="cambiarVista('frecuencia')">📈 Frecuencia de compra</a>
+        <div id="stock-bajo-badge" style="display:none; background:#fee2e2; border:1px solid #fca5a5; border-radius:8px; padding:8px 12px; margin:12px 8px 0; font-size:0.82rem; color:#dc2626; cursor:pointer;" onclick="cambiarVista('materia')">
+            ⚠️ <strong id="stock-bajo-count">0</strong> insumo(s) con stock bajo
+        </div>
+        <div style="margin-top:auto; padding-top:20px; border-top:1px solid rgba(255,255,255,0.15); margin-top:30px;">
+            <a onclick="cerrarSesion()" style="color:#fca5a5; cursor:pointer; font-size:0.88rem;">🔒 Cerrar sesión</a>
+        </div>
     </div>
 
     <div class="main-content">
-        
-        <div id="vista-pedidos" class="vista activa">
-            <div class="header"><h1>Gestión y Monitoreo de Pedidos</h1><p>Asigna nuevos pedidos intuitivamente y vigila su estatus en tiempo real.</p></div>
-            <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
-                <div class="card" style="flex: 1; min-width: 300px;">
-                    <h3>🚚 Nueva Venta / Asignación</h3>
+
+        <!-- ============ CREAR PEDIDO ============ -->
+        <div id="vista-crear" class="vista activa">
+            <div class="header"><h1>📝 Crear Pedido</h1><p>Define el contenido del pedido, el cliente, las piezas y el precio. El pedido queda listo para asignar.</p></div>
+            <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+                <div class="card" style="flex:1; min-width:320px;">
+                    <h3>Nuevo Pedido</h3>
                     <form id="form-pedido">
-                        <div class="form-group"><label>Cliente:</label><select id="cliente_id" required><option value="">Cargando clientes...</option></select></div>
-                        <div class="form-group"><label>Repartidor:</label><select id="repartidor_id" required><option value="">Cargando repartidores...</option></select></div>
-                        <div class="form-group"><label>Total ($):</label><input type="number" id="total" step="0.01" required></div>
-                        <button type="submit">Guardar y Asignar</button>
+                        <div class="form-group"><label>Cliente:</label><select id="cliente_id" required><option value="">Cargando...</option></select></div>
+                        <div class="form-group"><label>Contenido del pedido:</label><input type="text" id="contenido" placeholder="Ej. 5 cajas Vainilla + 2 Chochip" required></div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-group" style="flex:1;"><label>Piezas:</label><input type="number" id="piezas" min="0" placeholder="Ej. 7"></div>
+                            <div class="form-group" style="flex:1;"><label>Precio total ($):</label><input type="number" id="total" step="0.01" required></div>
+                        </div>
+                        <button type="submit">Crear Pedido</button>
                     </form>
                     <div id="mensaje-pedido" class="mensaje"></div>
                 </div>
-                <div class="table-container" style="flex: 2; min-width: 400px;">
-                    <h3 style="margin-bottom: 15px; color: var(--primary);">📡 Monitor en Tiempo Real</h3>
+                <div class="table-container" style="flex:2; min-width:380px;">
+                    <h3 style="margin-bottom:15px; color:var(--primary);">Pedidos creados sin asignar</h3>
                     <table>
-                        <thead><tr><th>Folio</th><th>Cliente</th><th>Repartidor</th><th>Total</th><th>Estatus</th><th>Acción</th></tr></thead>
-                        <tbody id="tabla-pedidos-monitor"></tbody>
+                        <thead><tr><th>Folio</th><th>Cliente</th><th>Contenido</th><th>Piezas</th><th>Total</th></tr></thead>
+                        <tbody id="tabla-creados-resumen"></tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <div id="vista-clientes" class="vista">
-            <div class="header"><h1>Directorio de Clientes</h1></div>
-            <div class="card" style="background-color: #f8fafc; border-left: 4px solid var(--primary);">
-                <h3>➕ Registrar Nuevo Cliente</h3>
-                <form id="form-nuevo-cliente" style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
-                    <div class="form-group" style="flex: 1; min-width: 200px;"><label>Nombre Comercial:</label><input type="text" id="nuevo_nombre" required></div>
-                    <div class="form-group" style="flex: 2; min-width: 250px;"><label>Dirección de Entrega:</label><input type="text" id="nueva_direccion" required></div>
-                    <div class="form-group" style="flex: 1; min-width: 150px;"><label>Teléfono:</label><input type="text" id="nuevo_telefono"></div>
-                    <div class="form-group" style="flex: 1; min-width: 150px;"><label>Límite de Crédito ($):</label><input type="number" id="nuevo_limite" step="0.01" required></div>
-                    <button type="submit" style="width: auto; padding: 10px 20px; height: 42px; margin-bottom: 15px;">Guardar</button>
-                </form>
-                <div id="mensaje-nuevo-cliente" class="mensaje"></div>
+        <!-- ============ ASIGNAR Y MONITOR ============ -->
+        <div id="vista-asignar" class="vista">
+            <div class="header"><h1>🚚 Asignar Pedidos</h1><p>Selecciona pedidos ya creados y asígnalos a un repartidor. Abajo el monitor en tiempo real.</p></div>
+            <div class="card">
+                <h3>Pedidos por asignar</h3>
+                <div class="table-container" style="box-shadow:none; padding:0;">
+                    <table>
+                        <thead><tr><th>Folio</th><th>Cliente</th><th>Dirección</th><th>Contenido</th><th>Total</th><th>Repartidor</th><th>Acción</th></tr></thead>
+                        <tbody id="tabla-asignar"></tbody>
+                    </table>
+                </div>
+                <div id="mensaje-asignar" class="mensaje"></div>
             </div>
             <div class="table-container">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+                    <h3 style="color:var(--primary);">📡 Monitor en Tiempo Real</h3>
+                    <div style="display:flex; gap:10px;">
+                        <button onclick="imprimirRuta()" style="width:auto; padding:8px 16px; background:#0ea5e9; font-size:0.85rem;">🖨️ Imprimir ruta del día</button>
+                        <button onclick="cerrarDia()" style="width:auto; padding:8px 16px; background:#7c3aed; font-size:0.85rem;">🌙 Cerrar el día</button>
+                    </div>
+                </div>
                 <table>
-                    <thead><tr><th>ID</th><th>Nombre</th><th>Dirección</th><th>Límite</th><th>Deuda</th><th>Estatus</th></tr></thead>
-                    <tbody id="tabla-clientes"></tbody>
+                    <thead><tr><th>Folio</th><th>Cliente</th><th>Repartidor</th><th>Contenido</th><th>Total</th><th>Estatus</th><th>Antigüedad</th><th>Acción</th><th>Cancelar</th></tr></thead>
+                    <tbody id="tabla-pedidos-monitor"></tbody>
                 </table>
             </div>
         </div>
 
-        <div id="vista-repartidores" class="vista">
-            <div class="header"><h1>Gestión de Repartidores</h1><p>Agrega a tus repartidores de confianza y asígnales un PIN de acceso a la app.</p></div>
-            <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
-                <div class="card" style="flex: 1; min-width: 300px; border-left: 4px solid var(--primary);">
-                    <h3>➕ Registrar Nuevo Repartidor</h3>
-                    <form id="form-repartidor">
-                        <div class="form-group"><label>Nombre del Repartidor:</label><input type="text" id="rep_nombre" placeholder="Ej. Carlos" required></div>
-                        <div class="form-group"><label>PIN de Acceso (4 dígitos):</label><input type="password" id="rep_pin" maxlength="4" placeholder="Ej. 5678" inputmode="numeric" required></div>
-                        <button type="submit">Guardar Repartidor</button>
-                    </form>
-                    <div id="mensaje-repartidor" class="mensaje"></div>
-                </div>
-                <div class="table-container" style="flex: 2; min-width: 400px;">
-                    <h3 style="margin-bottom: 15px; color: var(--primary);">🛵 Equipo Activo</h3>
-                    <table>
-                        <thead><tr><th>ID</th><th>Nombre</th><th>Estatus</th></tr></thead>
-                        <tbody id="tabla-repartidores"></tbody>
-                    </table>
-                </div>
+        <!-- ============ PRIORIDAD ============ -->
+        <div id="vista-prioridad" class="vista">
+            <div class="header"><h1>⏰ Pedidos Prioritarios</h1><p>Pedidos reagendados o atrasados hace días, semanas o meses. Atiéndelos primero.</p></div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Folio</th><th>Prioridad</th><th>Días atraso</th><th>Reagendado</th><th>Cliente</th><th>Teléfono</th><th>Contenido</th><th>Repartidor</th></tr></thead>
+                    <tbody id="tabla-prioridad"></tbody>
+                </table>
             </div>
         </div>
 
-        <div id="vista-produccion" class="vista">
-            <div class="header"><h1>Producción e Inventario</h1><p>Crea recetas, registra cajas horneadas o anota las compras de ingredientes.</p></div>
-            <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
-                
-                <div style="flex: 1; min-width: 350px;">
-                    <div class="card" style="border-left: 4px solid #8b5cf6;">
-                        <h3 style="color: #8b5cf6;">🍪 Crear Nuevo Producto</h3>
-                        <form id="form-nuevo-producto">
-                            <div style="display: flex; gap: 10px;">
-                                <div class="form-group" style="flex: 2;"><label>Nombre del Producto:</label><input type="text" id="nuevo_prod_nombre" placeholder="Ej. Galletas Vainilla" required></div>
-                                <div class="form-group" style="flex: 1;"><label>Precio Caja ($):</label><input type="number" id="nuevo_prod_precio" step="0.01" required></div>
+        <!-- ============ MATERIA PRIMA ============ -->
+        <div id="vista-materia" class="vista">
+            <div class="header"><h1>📦 Almacén de Materia Prima</h1><p>Cuánta y qué materia prima hay en stock, su bodega y alerta cuando se está acabando.</p></div>
+            <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+                <div class="card" style="flex:1; min-width:300px; border-left:4px solid var(--success);">
+                    <h3 style="color:var(--success);">➕ Registrar Materia Prima</h3>
+                    <form id="form-insumo">
+                        <div class="form-group"><label>Nombre:</label><input type="text" id="insumo_nombre" placeholder="Ej. Vainilla" required></div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-group" style="flex:1;"><label>Unidad:</label>
+                                <select id="insumo_unidad">
+                                    <option value="kg">kg — kilogramo</option>
+                                    <option value="g">g — gramo</option>
+                                    <option value="lt">lt — litro</option>
+                                    <option value="ml">ml — mililitro</option>
+                                    <option value="pza">pza — pieza</option>
+                                    <option value="ton">ton — tonelada</option>
+                                </select>
                             </div>
-                            
-                            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                                <div class="form-group" style="flex: 1; margin: 0;">
-                                    <label>Tipo de Producto:</label>
-                                    <select id="nuevo_prod_tipo" style="background-color: #f8fafc;">
-                                        <option value="propio">Producto Propio (Lleva receta)</option>
-                                        <option value="tercero">De Terceros (Solo reventa)</option>
-                                    </select>
-                                </div>
-                                <div class="form-group" style="flex: 1; margin: 0;">
-                                    <label>Asignar a Bodega:</label>
-                                    <select id="nuevo_prod_bodega" style="background-color: #f8fafc;">
-                                        <option value="1">Bodega 1 (Principal)</option>
-                                        <option value="2">Bodega 2 (Ventas)</option>
-                                        <option value="3">Bodega 3 (Tránsito)</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                                <h4 style="margin-bottom: 10px;">Ingredientes (Dejar vacío si es de terceros)</h4>
-                                <div style="display: flex; gap: 10px; align-items: flex-end;">
-                                    <div class="form-group" style="flex: 2; margin: 0;"><select id="nuevo_prod_insumo"><option value="">Cargando ingredientes...</option></select></div>
-                                    <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="nuevo_prod_cantidad" step="0.01" placeholder="Cantidad"></div>
-                                    <button type="button" onclick="agregarIngredienteAReceta()" style="background: #64748b; width: auto; padding: 10px;">Añadir</button>
-                                </div>
-                                <ul id="lista-ingredientes-receta" style="margin-top: 15px; padding-left: 20px; color: #475569; font-weight: bold;"></ul>
-                            </div>
-                            <button type="submit" style="background-color: #8b5cf6;">Guardar Producto en Bodega</button>
-                        </form>
-                        <div id="mensaje-nuevo-producto" class="mensaje"></div>
-                    </div>
-
-                    <div class="card">
-                        <h3>🏭 Registrar Horneado (Reporte de Insumos)</h3>
-                        <form id="form-produccion">
-                            <div style="display: flex; gap: 10px;">
-                                <div class="form-group" style="flex: 2;">
-                                    <label>Producto a hornear:</label>
-                                    <select id="prod_producto_id" required>
-                                        <option value="1">Galletas Vainilla (Ejemplo)</option>
-                                        </select>
-                                </div>
-                                <div class="form-group" style="flex: 1;">
-                                    <label>Cajas producidas:</label>
-                                    <input type="number" id="prod_cajas" required>
-                                </div>
-                            </div>
-
-                            <div style="background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #fde68a;">
-                                <h4 style="margin-bottom: 10px; color: #d97706;">Ingredientes utilizados en este lote:</h4>
-                                <div style="display: flex; gap: 10px; align-items: flex-end;">
-                                    <div class="form-group" style="flex: 2; margin: 0;">
-                                        <select id="prod_insumo_usado">
-                                            <option value="">Cargando ingredientes...</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group" style="flex: 1; margin: 0;">
-                                        <input type="number" id="prod_cantidad_usada" step="0.01" placeholder="Cantidad">
-                                    </div>
-                                    <button type="button" onclick="agregarInsumoAlHorneado()" style="background: #d97706; width: auto; padding: 10px;">Añadir</button>
-                                </div>
-                                <ul id="lista-insumos-horneado" style="margin-top: 15px; padding-left: 20px; color: #475569; font-weight: bold;"></ul>
-                            </div>
-
-                            <button type="submit" id="btn-produccion" style="background-color: #16a34a;">Registrar y Descontar Almacén</button>
-                        </form>
-                        <div id="mensaje-produccion" class="mensaje"></div>
-                    </div>
-
-                    <div class="card">
-                        <h3 style="color: #16a34a;">Registrar Compra de Ingredientes</h3>
-                        <form id="form-entrada-insumo">
-                            <div class="form-group"><label>Selecciona el Insumo Comprado:</label><select id="insumo_comprado_id" required><option value="">Cargando ingredientes...</option></select></div>
-                            <div class="form-group"><label>Cantidad Comprada (ej. kg):</label><input type="number" id="cantidad_comprada" step="0.01" required></div>
-                            <button type="submit" class="btn-success">Sumar al Almacén</button>
-                        </form>
-                        <div id="mensaje-insumo" class="mensaje"></div>
-                    </div>
+                            <div class="form-group" style="flex:1;"><label>Stock mínimo (alerta):</label><input type="number" id="insumo_minimo" step="0.01" placeholder="Ej. 5"></div>
+                        </div>
+                        <div class="form-group"><label>Bodega / Ubicación:</label><input type="text" id="insumo_ubicacion" value="Bodega Materia Prima"></div>
+                        <button type="submit" class="btn-success">Guardar Materia Prima</button>
+                    </form>
+                    <div id="mensaje-insumo" class="mensaje"></div>
                 </div>
-
-                <div class="table-container" style="flex: 1; min-width: 300px;">
-                    <h3 style="margin-bottom: 15px; color: #2563eb;">Almacén Actual</h3>
+                <div class="table-container" style="flex:2; min-width:380px;">
+                    <h3 style="margin-bottom:15px; color:var(--primary);">Stock Actual</h3>
                     <table>
-                        <thead><tr><th>ID</th><th>Insumo</th><th>Stock Disponible</th></tr></thead>
+                        <thead><tr><th>ID</th><th>Materia Prima</th><th>Bodega</th><th>Stock</th><th>Mínimo</th><th>Estado</th></tr></thead>
                         <tbody id="tabla-insumos"></tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <div id="vista-balance" class="vista">
-            <div class="header"><h1>Balance Financiero del Día</h1><p>Utilidad calculada cruzando los pedidos cobrados hoy contra los gastos de los repartidores.</p></div>
-            <div class="balance-grid">
-                <div class="stat-card"><h3>Ingresos Totales (Cobrado)</h3><div class="monto" id="balance-ingresos" style="color: #2563eb;">$0.00</div></div>
-                <div class="stat-card"><h3>Gastos Operativos (Repartidores)</h3><div class="monto" id="balance-egresos" style="color: #d97706;">$0.00</div></div>
-                <div class="stat-card"><h3>Utilidad Neta (Ganancia Libre)</h3><div class="monto" id="balance-utilidad">$0.00</div></div>
+        <!-- ============ PRODUCTO TERMINADO ============ -->
+        <div id="vista-terminado" class="vista">
+            <div class="header"><h1>🏬 Almacén de Producto Terminado</h1><p>Producto propio y de terceros, distribuido en las 3 bodegas.</p></div>
+
+            <!-- Entrada de stock de terceros -->
+            <div class="card" style="border-left:4px solid #0ea5e9; margin-bottom:20px;">
+                <h3 style="color:#0ea5e9;">📦 Agregar Stock de Producto de Terceros</h3>
+                <form id="form-entrada-terceros" style="display:flex; gap:15px; align-items:flex-end; flex-wrap:wrap;">
+                    <div class="form-group" style="flex:2; min-width:200px; margin:0;">
+                        <label>Producto de terceros:</label>
+                        <select id="tercero_producto_id" required><option value="">Cargando...</option></select>
+                    </div>
+                    <div class="form-group" style="flex:1; min-width:120px; margin:0;">
+                        <label>Cajas a ingresar:</label>
+                        <input type="number" id="tercero_cantidad" min="1" required>
+                    </div>
+                    <button type="submit" style="background:#0ea5e9; width:auto; padding:10px 20px;">Registrar Entrada</button>
+                </form>
+                <div id="mensaje-entrada-terceros" class="mensaje" style="margin-top:10px;"></div>
+            </div>
+
+            <div id="bodegas-container" class="balance-grid" style="grid-template-columns:repeat(3,1fr);"></div>
+        </div>
+
+        <!-- ============ PRODUCCIÓN / RECETAS ============ -->
+        <div id="vista-produccion" class="vista">
+            <div class="header"><h1>🏭 Producción y Recetas</h1><p>Crea una receta nueva con su materia prima total, o produce indicando la receta y la cantidad a fabricar.</p></div>
+            <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+
+                <div class="card" style="flex:1; min-width:350px; border-left:4px solid #8b5cf6;">
+                    <h3 style="color:#8b5cf6;">🍪 Crear Producto / Receta</h3>
+                    <form id="form-nuevo-producto">
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-group" style="flex:2;"><label>Nombre del producto:</label><input type="text" id="nuevo_prod_nombre" placeholder="Ej. Galletas Vainilla" required></div>
+                            <div class="form-group" style="flex:1;"><label>Precio caja ($):</label><input type="number" id="nuevo_prod_precio" step="0.01" required></div>
+                        </div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-group" style="flex:1;"><label>Tipo:</label>
+                                <select id="nuevo_prod_tipo">
+                                    <option value="propio">Propio (lleva receta)</option>
+                                    <option value="tercero">De terceros (reventa)</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;"><label>Bodega:</label>
+                                <select id="nuevo_prod_bodega">
+                                    <option value="1">Bodega 1</option>
+                                    <option value="2">Bodega 2</option>
+                                    <option value="3">Bodega 3</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="bloque-receta" style="background:#f1f5f9; padding:15px; border-radius:8px; margin-bottom:15px;">
+                            <h4 style="margin-bottom:10px;">Materia prima de la receta (por caja)</h4>
+                            <div style="display:flex; gap:10px; align-items:flex-end;">
+                                <div class="form-group" style="flex:2; margin:0;"><select id="nuevo_prod_insumo"><option value="">Cargando...</option></select></div>
+                                <div class="form-group" style="flex:1; margin:0;"><input type="number" id="nuevo_prod_cantidad" step="0.01" placeholder="Cantidad"></div>
+                                <button type="button" onclick="agregarIngredienteAReceta()" style="background:#64748b; width:auto; padding:10px;">Añadir</button>
+                            </div>
+                            <ul id="lista-ingredientes-receta" style="margin-top:15px; padding-left:20px; color:#475569; font-weight:bold;"></ul>
+                        </div>
+                        <div class="form-group" id="bloque-stock-inicial" style="display:none;"><label>Stock inicial (terceros):</label><input type="number" id="nuevo_prod_stock" min="0" value="0"></div>
+                        <button type="submit" style="background:#8b5cf6;">Guardar Producto</button>
+                    </form>
+                    <div id="mensaje-nuevo-producto" class="mensaje"></div>
+                </div>
+
+                <div class="card" style="flex:1; min-width:350px; border-left:4px solid #16a34a;">
+                    <h3 style="color:#16a34a;">⚙️ Producir por Receta</h3>
+                    <p style="margin-bottom:15px; color:#64748b; font-size:0.9rem;">Selecciona la receta y cuántas cajas vas a hacer. El sistema descuenta la materia prima automáticamente y suma las cajas al almacén.</p>
+                    <form id="form-producir">
+                        <div class="form-group"><label>Receta / Producto:</label><select id="producir_producto" required><option value="">Cargando recetas...</option></select></div>
+                        <div class="form-group"><label>Cantidad de cajas a producir:</label><input type="number" id="producir_cantidad" min="1" required></div>
+                        <div id="preview-receta" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px; margin-bottom:15px; font-size:0.9rem; color:#166534; display:none;"></div>
+                        <button type="submit" class="btn-success">Producir y Descontar Materia Prima</button>
+                    </form>
+                    <div id="mensaje-producir" class="mensaje"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ COMPRAS ============ -->
+        <div id="vista-compras" class="vista">
+            <div class="header"><h1>🛒 Compras de Materia Prima</h1><p>Registra cada compra como un ticket: dónde, qué, cuánto y a qué costo.</p></div>
+            <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+                <div class="card" style="flex:1; min-width:300px; border-left:4px solid var(--primary);">
+                    <h3>➕ Registrar Compra</h3>
+                    <form id="form-compra">
+                        <div class="form-group"><label>Materia prima:</label><select id="compra_insumo" required><option value="">Cargando...</option></select></div>
+                        <div class="form-group"><label>Proveedor / dónde se compró:</label><input type="text" id="compra_proveedor" placeholder="Ej. Distribuidora La Central" required></div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-group" style="flex:1;"><label>Cantidad:</label><input type="number" id="compra_cantidad" step="0.01" required></div>
+                            <div class="form-group" style="flex:1;"><label>Costo unitario ($):</label><input type="number" id="compra_costo" step="0.01" required></div>
+                        </div>
+                        <button type="submit">Registrar Compra</button>
+                    </form>
+                    <div id="mensaje-compra" class="mensaje"></div>
+                </div>
+                <div style="flex:2; min-width:380px;">
+                    <div class="balance-grid" style="grid-template-columns:repeat(2,1fr); margin-bottom:20px;">
+                        <div class="table-container">
+                            <h3 style="margin-bottom:10px; color:var(--primary);">Dónde compramos más</h3>
+                            <table><thead><tr><th>Proveedor</th><th>Compras</th><th>Total</th></tr></thead><tbody id="tabla-proveedores"></tbody></table>
+                        </div>
+                        <div class="table-container">
+                            <h3 style="margin-bottom:10px; color:var(--primary);">Qué compramos más</h3>
+                            <table><thead><tr><th>Insumo</th><th>Cantidad</th><th>Total</th></tr></thead><tbody id="tabla-insumos-comprados"></tbody></table>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <h3 style="margin-bottom:10px; color:var(--primary);">🎫 Tickets de compra</h3>
+                        <table><thead><tr><th>Fecha</th><th>Insumo</th><th>Proveedor</th><th>Cantidad</th><th>Costo unit.</th><th>Total</th></tr></thead><tbody id="tabla-tickets-compra"></tbody></table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ CONTABILIDAD ============ -->
+        <div id="vista-contabilidad" class="vista">
+            <div class="header"><h1>💳 Contabilidad</h1><p>Balance por periodo, deudas por cobrar y costo de producción.</p></div>
+
+            <div class="card">
+                <h3>📊 Balance</h3>
+                <div class="period-tabs">
+                    <button class="period-btn active" onclick="cargarBalance('dia', this)">Diario</button>
+                    <button class="period-btn" onclick="cargarBalance('semana', this)">Semanal</button>
+                    <button class="period-btn" onclick="cargarBalance('mes', this)">Mensual</button>
+                </div>
+                <div class="balance-grid" style="margin-top:20px;">
+                    <div class="stat-card"><h3>Ingresos (cobrado)</h3><div class="monto" id="balance-ingresos" style="color:#2563eb;">$0.00</div></div>
+                    <div class="stat-card"><h3>Egresos (compras + repartidores)</h3><div class="monto" id="balance-egresos" style="color:#d97706;">$0.00</div></div>
+                    <div class="stat-card"><h3>Utilidad neta</h3><div class="monto" id="balance-utilidad">$0.00</div></div>
+                </div>
+                <p id="balance-detalle" style="margin-top:15px; color:#64748b; text-align:center;"></p>
+            </div>
+
+            <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+                <div class="table-container" style="flex:1; min-width:340px;">
+                    <h3 style="margin-bottom:10px; color:#dc2626;">🧾 Deudas por cobrar — Total: <span id="total-deudas">$0.00</span></h3>
+                    <table><thead><tr><th>Cliente</th><th>Teléfono</th><th>Deuda</th><th>Abonar</th></tr></thead><tbody id="tabla-deudas"></tbody></table>
+                </div>
+                <div class="table-container" style="flex:1; min-width:340px;">
+                    <h3 style="margin-bottom:10px; color:#8b5cf6;">🏭 Contabilidad de producción (mes)</h3>
+                    <div id="resumen-produccion" style="margin-bottom:15px; color:#475569;"></div>
+                    <table><thead><tr><th>Producto</th><th>Cajas</th><th>Costo</th></tr></thead><tbody id="tabla-prod-contab"></tbody></table>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <h3 style="margin-bottom:10px; color:var(--primary);">🎫 Tickets del periodo (compras + gastos de repartidores)</h3>
+                <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Detalle</th><th>Monto</th></tr></thead><tbody id="tabla-tickets-balance"></tbody></table>
+            </div>
+        </div>
+
+        <!-- ============ CLIENTES ============ -->
+        <div id="vista-clientes" class="vista">
+            <div class="header"><h1>👥 Directorio de Clientes</h1></div>
+            <div class="card" style="background:#f8fafc; border-left:4px solid var(--primary);">
+                <h3>➕ Registrar Nuevo Cliente</h3>
+                <form id="form-nuevo-cliente" style="display:flex; gap:15px; align-items:flex-end; flex-wrap:wrap;">
+                    <div class="form-group" style="flex:1; min-width:200px;"><label>Nombre:</label><input type="text" id="nuevo_nombre" required></div>
+                    <div class="form-group" style="flex:2; min-width:250px;"><label>Dirección:</label><input type="text" id="nueva_direccion" required></div>
+                    <div class="form-group" style="flex:1; min-width:150px;"><label>Teléfono:</label><input type="text" id="nuevo_telefono"></div>
+                    <div class="form-group" style="flex:1; min-width:150px;"><label>Límite de crédito ($):</label><input type="number" id="nuevo_limite" step="0.01" required></div>
+                    <button type="submit" style="width:auto; padding:10px 20px; height:42px; margin-bottom:15px;">Guardar</button>
+                </form>
+                <div id="mensaje-nuevo-cliente" class="mensaje"></div>
+            </div>
+            <div class="table-container">
+                <table><thead><tr><th>ID</th><th>Nombre</th><th>Dirección</th><th>Límite</th><th>Deuda</th><th>Estatus</th><th>Acciones</th></tr></thead><tbody id="tabla-clientes"></tbody></table>
+            </div>
+        </div>
+
+        <!-- ============ REPARTIDORES ============ -->
+        <div id="vista-repartidores" class="vista">
+            <div class="header"><h1>🛵 Repartidores</h1><p>Agrega a tus repartidores de confianza y asígnale a cada uno su PIN de acceso a la app.</p></div>
+            <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+                <div class="card" style="flex:1; min-width:300px; border-left:4px solid var(--primary);">
+                    <h3>➕ Registrar Repartidor</h3>
+                    <form id="form-repartidor">
+                        <div class="form-group"><label>Nombre:</label><input type="text" id="rep_nombre" placeholder="Ej. Carlos" required></div>
+                        <div class="form-group"><label>PIN de acceso (4 dígitos):</label><input type="password" id="rep_pin" maxlength="4" placeholder="****" inputmode="numeric" required></div>
+                        <button type="submit">Guardar Repartidor</button>
+                    </form>
+                    <div id="mensaje-repartidor" class="mensaje"></div>
+                </div>
+                <div class="table-container" style="flex:2; min-width:380px;">
+                    <h3 style="margin-bottom:15px; color:var(--primary);">Equipo</h3>
+                    <table><thead><tr><th>ID</th><th>Nombre</th><th>Estatus</th><th>Acciones</th></tr></thead><tbody id="tabla-repartidores"></tbody></table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ FRECUENCIA ============ -->
+        <div id="vista-frecuencia" class="vista">
+            <div class="header"><h1>📈 Frecuencia de Compra</h1><p>Con qué frecuencia compra cada cliente y qué productos se piden más.</p></div>
+            <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+                <div class="table-container" style="flex:1; min-width:340px;">
+                    <h3 style="margin-bottom:10px; color:var(--primary);">Por cliente</h3>
+                    <table><thead><tr><th>Cliente</th><th>Pedidos</th><th>Última compra</th><th>Cada (días)</th></tr></thead><tbody id="tabla-frec-clientes"></tbody></table>
+                </div>
+                <div class="table-container" style="flex:1; min-width:340px;">
+                    <h3 style="margin-bottom:10px; color:var(--primary);">Productos más pedidos</h3>
+                    <table><thead><tr><th>Producto / Contenido</th><th>Veces</th><th>Piezas</th></tr></thead><tbody id="tabla-frec-productos"></tbody></table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ CONTROL DE CARGA ============ -->
+        <div id="vista-control-carga" class="vista">
+            <div class="header">
+                <h1>📋 Control de Carga</h1>
+                <p>Registra cuántas unidades salieron con cada repartidor y cuántas regresaron. Si no cuadra, hay cajas sin cuenta.</p>
+            </div>
+
+            <div style="display:flex; gap:12px; align-items:center; margin-bottom:24px;">
+                <label style="font-weight:bold;">Fecha:</label>
+                <input type="date" id="carga-fecha" style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.95rem;">
+                <button onclick="cargarControlCarga()" style="width:auto; padding:8px 20px;">Consultar</button>
+            </div>
+
+            <div id="carga-tabla-wrap"></div>
+        </div>
+
+        <!-- ============ DEUDAS DEL NEGOCIO ============ -->
+        <div id="vista-deudas-negocio" class="vista">
+            <div class="header">
+                <h1>🏦 Deudas del Negocio</h1>
+                <p>Lo que el negocio debe a proveedores u otros. Registra cada deuda y abona contra ella.</p>
+            </div>
+            <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;">
+
+                <!-- Formulario nueva deuda -->
+                <div class="card" style="flex:1; min-width:320px; border-left:4px solid #dc2626;">
+                    <h3 style="color:#dc2626;">➕ Registrar Deuda</h3>
+                    <form id="form-deuda-negocio">
+                        <div class="form-group"><label>Proveedor / Acreedor:</label><input type="text" id="deuda-proveedor" placeholder="Ej. Distribuidora La Central" required></div>
+                        <div class="form-group"><label>Concepto:</label><input type="text" id="deuda-concepto" placeholder="Ej. Compra de harina a crédito" required></div>
+                        <div style="display:flex; gap:10px;">
+                            <div class="form-group" style="flex:1;"><label>Monto total ($):</label><input type="number" id="deuda-monto" step="0.01" required></div>
+                            <div class="form-group" style="flex:1;"><label>Fecha:</label><input type="date" id="deuda-fecha" required></div>
+                        </div>
+                        <div class="form-group"><label>Vencimiento (opcional):</label><input type="date" id="deuda-vencimiento"></div>
+                        <div class="form-group"><label>Notas:</label><input type="text" id="deuda-notas" placeholder="Opcional"></div>
+                        <button type="submit" style="background:#dc2626;">Registrar Deuda</button>
+                    </form>
+                    <div id="msg-deuda" class="mensaje"></div>
+                </div>
+
+                <!-- Lista de deudas -->
+                <div class="table-container" style="flex:2; min-width:400px;">
+                    <!-- Totales resumen -->
+                    <div class="balance-grid" style="grid-template-columns:repeat(3,1fr); margin-bottom:20px;">
+                        <div class="stat-card"><h3>Total adeudado</h3><div class="monto" id="deuda-total-monto" style="color:#dc2626;">$0.00</div></div>
+                        <div class="stat-card"><h3>Ya pagado</h3><div class="monto" id="deuda-total-pagado" style="color:#16a34a;">$0.00</div></div>
+                        <div class="stat-card"><h3>Por pagar</h3><div class="monto" id="deuda-total-pendiente" style="color:#d97706;">$0.00</div></div>
+                    </div>
+                    <table>
+                        <thead><tr><th>Proveedor</th><th>Concepto</th><th>Total</th><th>Pagado</th><th>Pendiente</th><th>Vence</th><th>Estatus</th><th>Abonar</th></tr></thead>
+                        <tbody id="tabla-deudas-negocio"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
     </div>
 
     <script src="js/dashboard.js"></script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+</script>
 </body>
 </html>

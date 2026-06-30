@@ -3,15 +3,17 @@
 body { display: flex; height: 100vh; background-color: var(--bg); color: var(--text); }
 
 /* Menú Lateral */
-.sidebar { width: 250px; background-color: var(--sidebar); color: white; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-.sidebar h2 { font-size: 1.5rem; text-align: center; margin-bottom: 20px; color: #facc15; }
-.sidebar a { color: #cbd5e1; text-decoration: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+.sidebar { width: 250px; background-color: var(--sidebar); color: white; padding: 20px; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+.sidebar h2 { font-size: 1.5rem; text-align: center; margin-bottom: 15px; color: #facc15; }
+.sidebar .nav-group { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-top: 14px; padding-left: 6px; }
+.sidebar a { color: #cbd5e1; text-decoration: none; padding: 9px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.92rem; }
 .sidebar a:hover, .sidebar a.active { background-color: var(--primary); color: white; }
 
 /* Contenido y Vistas */
 .main-content { flex: 1; padding: 40px; overflow-y: auto; }
-.header { margin-bottom: 30px; }
+.header { margin-bottom: 25px; }
 .header h1 { font-size: 2rem; color: #0f172a; }
+.header p { color: #64748b; margin-top: 6px; }
 .vista { display: none; }
 .vista.activa { display: block; }
 
@@ -22,21 +24,33 @@ body { display: flex; height: 100vh; background-color: var(--bg); color: var(--t
 .form-group label { display: block; font-weight: bold; margin-bottom: 5px; }
 .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 5px; }
 button { width: 100%; padding: 12px; background-color: var(--primary); color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+button:hover { opacity: 0.92; }
 button.btn-success { background-color: var(--success); }
 
-.table-container { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); width: 100%; }
+.table-container { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); width: 100%; margin-bottom: 20px; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+th, td { padding: 11px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 0.92rem; white-space: nowrap; }
 th { background-color: #f1f5f9; }
 
 .mensaje { margin-top: 15px; font-weight: bold; text-align: center; display: none; padding: 10px; border-radius: 5px; }
-.exito { background-color: #dcfce3; color: #166534; }
+.exito { background-color: #dcfce7; color: #166534; }
 .error { background-color: #fee2e2; color: #991b1b; }
 
 /* Tarjetas de Balance */
 .balance-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .stat-card { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
-.stat-card h3 { color: #64748b; font-size: 1.1rem; margin-bottom: 10px; }
-.stat-card .monto { font-size: 2.5rem; font-weight: bold; color: #0f172a; }
+.stat-card h3 { color: #64748b; font-size: 1rem; margin-bottom: 10px; }
+.stat-card .monto { font-size: 2.2rem; font-weight: bold; color: #0f172a; }
 .utilidad-positiva { color: #16a34a !important; }
 .utilidad-negativa { color: #dc2626 !important; }
+
+/* Botones de periodo (Balance) */
+.period-tabs { display: flex; gap: 10px; }
+.period-btn { width: auto; padding: 8px 20px; background: #e2e8f0; color: #475569; }
+.period-btn.active { background: var(--primary); color: white; }
+
+@media (max-width: 700px) {
+  body { flex-direction: column; height: auto; }
+  .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; }
+  .main-content { padding: 20px; }
+}

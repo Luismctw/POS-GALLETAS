@@ -1,11 +1,27 @@
-# Ignorar carpetas de dependencias
+# Dependencias
 node_modules/
 **/node_modules/
 
-# Ignorar variables de entorno
+# Variables de entorno (nunca subir a GitHub)
 .env
+**/.env
 
-# Ignorar logs y archivos temporales
-npm-debug.log
-dist/
+# Archivos subidos por usuarios (fotos de tickets)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Backups de la BD
+backend/backups/*
+!backend/backups/.gitkeep
+
+# Archivos del sistema
 .DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+*.log
+
+# Temporales
+dist/
+.cache/

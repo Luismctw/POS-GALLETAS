@@ -3,162 +3,647 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>POS Galletas - App Repartidor</title>
+    <title>POS Galletas – Repartidor</title>
+    <link rel="manifest" href="/manifest-repartidor.json">
+    <meta name="theme-color" content="#d97706">
+    <link rel="apple-touch-icon" href="/icon-rep-192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="mobile-web-app-capable" content="yes">
     <style>
-        :root { --primary: #d97706; --bg: #f3f4f6; --text: #334155; --white: #ffffff; --gray: #94a3b8; }
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
-        body { background-color: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
-        
-        #login-view { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 30px; text-align: center; }
-        #login-view input { width: 100%; max-width: 300px; padding: 15px; font-size: 2rem; text-align: center; letter-spacing: 15px; border: 2px solid #e2e8f0; border-radius: 8px; margin: 20px 0; }
-        .btn { width: 100%; max-width: 300px; padding: 15px; background-color: var(--primary); color: var(--white); border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; }
-        #error-msg { color: #ef4444; font-weight: bold; margin-top: 15px; display: none; }
+        :root {
+            --primary: #d97706;
+            --primary-dark: #b45309;
+            --green: #16a34a;
+            --red: #dc2626;
+            --blue: #2563eb;
+            --bg: #f1f5f9;
+            --white: #ffffff;
+            --gray: #94a3b8;
+            --text: #1e293b;
+            --border: #e2e8f0;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 
+        /* ===== LOGIN ===== */
+        #login-view {
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            height: 100%; padding: 30px; text-align: center; gap: 8px;
+        }
+        .login-logo { font-size: 3.5rem; margin-bottom: 8px; }
+        .login-title { font-size: 1.5rem; font-weight: 800; color: var(--text); }
+        .login-sub { color: var(--gray); font-size: 0.95rem; margin-bottom: 20px; }
+        .pin-display {
+            display: flex; gap: 14px; justify-content: center; margin: 10px 0 24px;
+        }
+        .pin-dot {
+            width: 18px; height: 18px; border-radius: 50%;
+            border: 2.5px solid var(--primary); background: transparent;
+            transition: background 0.15s;
+        }
+        .pin-dot.filled { background: var(--primary); }
+        .keypad {
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 12px; max-width: 280px; width: 100%;
+        }
+        .key {
+            padding: 18px 0; font-size: 1.4rem; font-weight: 700;
+            background: var(--white); border: none; border-radius: 14px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); cursor: pointer;
+            color: var(--text); transition: all 0.1s;
+        }
+        .key:active { transform: scale(0.93); background: #f1f5f9; }
+        .key-enter { background: var(--primary); color: white; }
+        .key-enter:active { background: var(--primary-dark); }
+        .key-del { background: #f1f5f9; font-size: 1.2rem; }
+        #login-error { color: var(--red); font-weight: bold; font-size: 0.9rem; min-height: 20px; margin-top: 8px; }
+
+        /* ===== APP ===== */
         #app-view { display: none; flex-direction: column; height: 100%; }
-        header { background: var(--white); padding: 15px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center;}
-        .logout-btn { background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 0.8rem;}
 
-        .tab-content { flex: 1; overflow-y: auto; padding: 20px; display: none; }
-        .tab-content.active { display: block; }
+        header {
+            background: var(--primary); color: white;
+            padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .header-left { display: flex; flex-direction: column; }
+        .header-name { font-weight: 800; font-size: 1.05rem; }
+        .header-date { font-size: 0.78rem; opacity: 0.85; margin-top: 2px; }
+        .btn-logout {
+            background: rgba(255,255,255,0.2); color: white; border: none;
+            padding: 7px 14px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; font-weight: 600;
+        }
 
-        nav { background: var(--white); display: flex; justify-content: space-around; padding: 15px 0; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
-        .nav-item { color: var(--gray); background: none; border: none; font-size: 1rem; font-weight: bold; display: flex; flex-direction: column; align-items: center; gap: 5px; }
-        .nav-item.active { color: var(--primary); }
+        .tab-body { flex: 1; overflow-y: auto; padding: 16px; }
+
+        /* ===== PEDIDO CARD ===== */
+        .pedido-card {
+            background: var(--white); border-radius: 14px; padding: 16px;
+            margin-bottom: 14px; border-left: 5px solid var(--blue);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .pedido-card.entregado { border-left-color: var(--green); opacity: 0.75; }
+        .pedido-card.reagendado { border-left-color: var(--gray); opacity: 0.6; }
+        .pedido-card.critico { border-left-color: var(--red); }
+
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+        .card-folio { font-size: 0.8rem; color: var(--gray); font-weight: 600; }
+        .card-cliente { font-size: 1.1rem; font-weight: 800; color: var(--text); margin-top: 2px; }
+
+        .badge {
+            font-size: 0.7rem; padding: 3px 9px; border-radius: 20px;
+            font-weight: 700; white-space: nowrap;
+        }
+        .badge-pendiente { background: #dbeafe; color: #1d4ed8; }
+        .badge-entregado { background: #dcfce7; color: #15803d; }
+        .badge-reagendado { background: #f1f5f9; color: #64748b; }
+        .badge-alerta    { background: #fef3c7; color: #92400e; }
+
+        .card-info { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+        .card-row { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+        .card-row .icon { width: 20px; text-align: center; flex-shrink: 0; }
+        .card-row .val { color: #334155; }
+        .card-row .val.highlight { font-weight: 800; font-size: 1rem; color: var(--text); }
+        .card-row .val.deuda { color: var(--red); font-weight: 700; }
+        .card-row .val.ok { color: var(--green); font-weight: 700; }
+
+        .card-links { display: flex; gap: 12px; margin-bottom: 12px; }
+        .card-links a { font-size: 0.85rem; font-weight: 600; color: var(--primary); text-decoration: none; }
+
+        .card-actions { display: flex; gap: 10px; }
+        .btn-action {
+            flex: 1; padding: 13px 0; border: none; border-radius: 10px;
+            font-size: 0.95rem; font-weight: 700; cursor: pointer; color: white;
+        }
+        .btn-entregar { background: var(--green); }
+        .btn-reagendar { background: #ef4444; }
+        .btn-action:active { opacity: 0.85; transform: scale(0.98); }
+
+        .empty-state { text-align: center; padding: 50px 20px; color: var(--gray); }
+        .empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+        .empty-state p { font-size: 1rem; }
+
+        /* ===== GASTOS ===== */
+        .gasto-form { background: var(--white); border-radius: 14px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .gasto-form label { display: block; font-weight: 700; margin-bottom: 6px; font-size: 0.9rem; color: #475569; }
+        .gasto-form input, .gasto-form select {
+            width: 100%; padding: 13px; border: 1.5px solid var(--border); border-radius: 10px;
+            font-size: 1rem; margin-bottom: 14px; background: #f8fafc;
+        }
+        .gasto-form input:focus, .gasto-form select:focus { outline: none; border-color: var(--primary); background: white; }
+        .btn-submit {
+            width: 100%; padding: 15px; background: var(--primary); color: white;
+            border: none; border-radius: 10px; font-size: 1.05rem; font-weight: 700; cursor: pointer;
+        }
+        .btn-submit:active { background: var(--primary-dark); }
+        .gasto-msg { margin-top: 12px; padding: 12px; border-radius: 8px; font-weight: 600; text-align: center; display: none; }
+        .gasto-msg.ok { background: #dcfce7; color: #166534; }
+        .gasto-msg.err { background: #fee2e2; color: #991b1b; }
+
+        /* ===== RESUMEN ===== */
+        .resumen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+        .stat-card {
+            background: var(--white); border-radius: 14px; padding: 18px;
+            text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .stat-card.full { grid-column: 1 / -1; }
+        .stat-label { font-size: 0.8rem; color: var(--gray); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .stat-value { font-size: 1.8rem; font-weight: 800; color: var(--text); }
+        .stat-value.verde { color: var(--green); }
+        .stat-value.rojo  { color: var(--red); }
+        .stat-value.azul  { color: var(--blue); }
+
+        /* ===== MODAL COBRO ===== */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+            display: flex; align-items: flex-end; justify-content: center;
+            z-index: 100; padding: 0;
+        }
+        .modal-overlay.hidden { display: none; }
+        .modal {
+            background: var(--white); border-radius: 20px 20px 0 0;
+            padding: 24px 20px 36px; width: 100%; max-width: 500px;
+            box-shadow: 0 -4px 30px rgba(0,0,0,0.2);
+        }
+        .modal h3 { font-size: 1.15rem; font-weight: 800; margin-bottom: 4px; }
+        .modal .modal-sub { color: var(--gray); font-size: 0.88rem; margin-bottom: 18px; }
+        .modal label { display: block; font-weight: 700; font-size: 0.9rem; color: #475569; margin-bottom: 6px; }
+        .modal input {
+            width: 100%; padding: 15px; border: 2px solid var(--border); border-radius: 10px;
+            font-size: 1.4rem; font-weight: 700; text-align: center; margin-bottom: 16px;
+        }
+        .modal input:focus { outline: none; border-color: var(--primary); }
+        .modal-btns { display: flex; gap: 10px; }
+        .btn-cancel { flex: 1; padding: 14px; background: #f1f5f9; border: none; border-radius: 10px; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
+        .btn-confirm { flex: 2; padding: 14px; background: var(--green); color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
+
+        /* ===== NAV ===== */
+        nav {
+            background: var(--white); display: flex; justify-content: space-around;
+            padding: 10px 0 env(safe-area-inset-bottom, 10px);
+            box-shadow: 0 -2px 12px rgba(0,0,0,0.08); flex-shrink: 0;
+        }
+        .nav-btn {
+            background: none; border: none; display: flex; flex-direction: column;
+            align-items: center; gap: 3px; padding: 6px 14px; cursor: pointer;
+            color: var(--gray); font-size: 0.72rem; font-weight: 600;
+        }
+        .nav-btn .nav-icon { font-size: 1.4rem; }
+        .nav-btn.active { color: var(--primary); }
+        .nav-badge {
+            position: absolute; top: -4px; right: -6px;
+            background: var(--red); color: white; border-radius: 10px;
+            font-size: 0.65rem; padding: 1px 5px; font-weight: 700;
+        }
+        .nav-icon-wrap { position: relative; display: inline-block; }
     </style>
 </head>
 <body>
 
-    <div id="login-view">
-        <h2>🍪 Repartidores</h2>
-        <p>Ingresa tu PIN</p>
-        <input type="password" id="pin-input" maxlength="4" placeholder="****" inputmode="numeric">
-        <button class="btn" id="btn-login">Entrar</button>
-        <p id="error-msg"></p>
+<!-- ===== LOGIN ===== -->
+<div id="login-view">
+    <div class="login-logo">🍪</div>
+    <div class="login-title">POS Galletas</div>
+    <div class="login-sub">Ingresa tu PIN de 4 dígitos</div>
+    <div class="pin-display">
+        <div class="pin-dot" id="d0"></div>
+        <div class="pin-dot" id="d1"></div>
+        <div class="pin-dot" id="d2"></div>
+        <div class="pin-dot" id="d3"></div>
+    </div>
+    <div class="keypad">
+        <button class="key" onclick="tecla('1')">1</button>
+        <button class="key" onclick="tecla('2')">2</button>
+        <button class="key" onclick="tecla('3')">3</button>
+        <button class="key" onclick="tecla('4')">4</button>
+        <button class="key" onclick="tecla('5')">5</button>
+        <button class="key" onclick="tecla('6')">6</button>
+        <button class="key" onclick="tecla('7')">7</button>
+        <button class="key" onclick="tecla('8')">8</button>
+        <button class="key" onclick="tecla('9')">9</button>
+        <button class="key key-del" onclick="borrar()">⌫</button>
+        <button class="key" onclick="tecla('0')">0</button>
+        <button class="key key-enter" onclick="login()">✓</button>
+    </div>
+    <div id="login-error"></div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="app-view">
+    <header>
+        <div class="header-left">
+            <span class="header-name" id="welcome-msg">Hola</span>
+            <span class="header-date" id="header-date"></span>
+        </div>
+        <button class="btn-logout" id="btn-logout">Salir</button>
+    </header>
+
+    <!-- Tab: Ruta -->
+    <div id="tab-ruta" class="tab-body" style="display:block;">
+        <div id="btn-ruta-mapa-wrap" style="padding:12px 16px 0; display:none;">
+            <a id="btn-ruta-mapa" href="#" target="_blank"
+               style="display:block; background:#2563eb; color:#fff; text-align:center; padding:12px; border-radius:10px; font-weight:700; font-size:0.95rem; text-decoration:none;">
+                🗺️ Ver ruta completa en Google Maps
+            </a>
+        </div>
+        <div id="lista-pedidos"></div>
     </div>
 
-    <div id="app-view">
-        <header>
-            <h3 id="welcome-msg">Hola</h3>
-            <button class="logout-btn" id="btn-logout">Salir</button>
-        </header>
-
-        <div id="tab-ruta" class="tab-content active">
-            <h2>Ruta de Hoy</h2>
-            <div id="lista-pedidos"></div>
-        </div>
-
-        <div id="tab-gastos" class="tab-content">
-            <h2>Registrar Gasto</h2>
-            <form id="form-gastos" style="margin-top: 20px; text-align: left;">
-                <label style="font-weight: bold; margin-bottom: 5px; display: block;">Categoría:</label>
-                <select id="gasto-categoria" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc;" required>
-                    <option value="" disabled selected>Selecciona una categoría</option>
-                    <option value="gasolina">Gasolina</option>
-                    <option value="comida">Comida</option>
-                    <option value="caseta">Caseta</option>
-                    <option value="otro">Otro</option>
+    <!-- Tab: Gastos -->
+    <div id="tab-gastos" class="tab-body" style="display:none;">
+        <div class="gasto-form">
+            <form id="form-gastos">
+                <label>Categoría</label>
+                <select id="gasto-categoria" required>
+                    <option value="" disabled selected>Selecciona...</option>
+                    <option value="gasolina">⛽ Gasolina</option>
+                    <option value="comida">🍔 Comida</option>
+                    <option value="caseta">🛣️ Caseta</option>
+                    <option value="otro">📌 Otro</option>
                 </select>
-                <label style="font-weight: bold; margin-bottom: 5px; display: block;">Monto ($):</label>
-                <input type="number" id="gasto-monto" step="0.01" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #ccc;" required>
-                <button type="submit" class="btn" style="width: 100%;">Guardar Gasto</button>
+                <label>Monto ($)</label>
+                <input type="number" id="gasto-monto" step="0.01" min="0.01" placeholder="0.00" required inputmode="decimal">
+                <label>Foto del ticket (opcional)</label>
+                <input type="file" id="gasto-foto" accept="image/*" capture="environment">
+                <button type="submit" class="btn-submit">Guardar Gasto</button>
             </form>
-            <p id="gasto-msg" style="margin-top: 15px; font-weight: bold; display: none; text-align: center;"></p>
+            <div id="gasto-msg" class="gasto-msg"></div>
         </div>
-
-        <div id="tab-resumen" class="tab-content">
-            <h2>Mi Resumen del Día</h2>
-            <div style="background: white; padding: 20px; border-radius: 8px; margin-top: 20px; border: 1px solid #e2e8f0;">
-                <p style="font-size: 1.2rem; margin-bottom: 15px;">📦 Entregados: <strong id="res-entregados">0</strong></p>
-                <p style="font-size: 1.2rem; margin-bottom: 15px; color: #16a34a;">💰 Cobrado: $<strong id="res-cobrado">0.00</strong></p>
-                <p style="font-size: 1.2rem; color: #ef4444;">💸 Gastos: $<strong id="res-gastos">0.00</strong></p>
+        <!-- Lista de gastos del día -->
+        <div style="padding:0 16px 16px;">
+            <div style="font-weight:700; color:#475569; font-size:0.88rem; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.05em;">Gastos registrados hoy</div>
+            <div id="lista-gastos-dia" style="display:flex; flex-direction:column; gap:8px;">
+                <div style="color:#94a3b8; font-size:0.9rem; text-align:center; padding:16px;">Cargando...</div>
             </div>
         </div>
-
-        <nav>
-            <button class="nav-item active" onclick="switchTab('ruta', this)">📦 Ruta</button>
-            <button class="nav-item" onclick="switchTab('gastos', this)">💸 Gastos</button>
-            <button class="nav-item" onclick="switchTab('resumen', this)">📊 Resumen</button>
-        </nav>
     </div>
 
-    <script>
-        // Lógica de Login
-        document.getElementById('btn-login').addEventListener('click', async () => {
-            const pin = document.getElementById('pin-input').value;
-            try {
-                const response = await fetch('http://localhost:3001/api/repartidores/auth', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin })
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    sessionStorage.setItem('repartidor', JSON.stringify(data.repartidor));
-                    iniciarApp(data.repartidor);
-                } else {
-                    document.getElementById('error-msg').style.display = "block";
-                    document.getElementById('error-msg').textContent = data.mensaje;
-                }
-            } catch (error) { alert("Error de conexión"); }
+    <!-- Tab: Resumen -->
+    <div id="tab-resumen" class="tab-body" style="display:none;">
+        <div class="resumen-grid">
+            <div class="stat-card">
+                <div class="stat-label">Entregados</div>
+                <div class="stat-value azul" id="res-entregados">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Pendientes</div>
+                <div class="stat-value" id="res-pendientes">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Cobrado</div>
+                <div class="stat-value verde" id="res-cobrado">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Gastos</div>
+                <div class="stat-value rojo" id="res-gastos">—</div>
+            </div>
+            <div class="stat-card full">
+                <div class="stat-label">Neto del día</div>
+                <div class="stat-value" id="res-neto">—</div>
+            </div>
+        </div>
+    </div>
+
+    <nav>
+        <button class="nav-btn active" id="nav-ruta" onclick="switchTab('ruta', this)">
+            <span class="nav-icon-wrap">
+                <span class="nav-icon">🗺️</span>
+                <span class="nav-badge" id="badge-pendientes" style="display:none;"></span>
+            </span>
+            Ruta
+        </button>
+        <button class="nav-btn" id="nav-gastos" onclick="switchTab('gastos', this)">
+            <span class="nav-icon">💸</span>
+            Gastos
+        </button>
+        <button class="nav-btn" id="nav-resumen" onclick="switchTab('resumen', this)">
+            <span class="nav-icon">📊</span>
+            Resumen
+        </button>
+    </nav>
+</div>
+
+<!-- ===== MODAL COBRO ===== -->
+<div class="modal-overlay hidden" id="modal-cobro">
+    <div class="modal">
+        <h3>💰 Confirmar entrega</h3>
+        <p class="modal-sub" id="modal-sub">Pedido #—</p>
+        <label>Monto cobrado al cliente ($)</label>
+        <input type="number" id="modal-monto" step="0.01" min="0" inputmode="decimal" placeholder="0.00">
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
+            <button class="btn-confirm" onclick="confirmarEntrega()">Confirmar entrega</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API = '/api';
+    let repartidor = null;
+    let pinActual = '';
+    let pedidoEnCurso = null;
+    let intervalRuta = null;
+
+    // ===== UTILIDADES =====
+    const hoy = () => new Date().toISOString().split('T')[0];
+    const fmt$ = n => '$' + Number(n).toFixed(2);
+    const diasSemana = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+    const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    function fechaBonita() {
+        const d = new Date();
+        return `${diasSemana[d.getDay()]}, ${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`;
+    }
+
+    // ===== PIN / LOGIN =====
+    function tecla(n) {
+        if (pinActual.length >= 4) return;
+        pinActual += n;
+        actualizarDots();
+        if (pinActual.length === 4) login();
+    }
+    function borrar() { pinActual = pinActual.slice(0, -1); actualizarDots(); }
+    function actualizarDots() {
+        for (let i = 0; i < 4; i++) {
+            document.getElementById(`d${i}`).classList.toggle('filled', i < pinActual.length);
+        }
+    }
+    document.addEventListener('keydown', e => {
+        if (document.getElementById('login-view').style.display === 'none') return;
+        if (e.key >= '0' && e.key <= '9') tecla(e.key);
+        if (e.key === 'Backspace') borrar();
+        if (e.key === 'Enter') login();
+    });
+
+    async function login() {
+        if (pinActual.length < 4) return;
+        const errEl = document.getElementById('login-error');
+        errEl.textContent = '';
+        try {
+            const res = await fetch(`${API}/repartidores/auth`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: pinActual })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                repartidor = data.repartidor;
+                sessionStorage.setItem('repartidor', JSON.stringify(repartidor));
+                iniciarApp();
+            } else {
+                errEl.textContent = data.mensaje || 'PIN incorrecto';
+                pinActual = '';
+                actualizarDots();
+            }
+        } catch { errEl.textContent = 'Sin conexión al servidor'; pinActual = ''; actualizarDots(); }
+    }
+
+    // ===== APP =====
+    function iniciarApp() {
+        document.getElementById('login-view').style.display = 'none';
+        document.getElementById('app-view').style.display = 'flex';
+        document.getElementById('welcome-msg').textContent = `Hola, ${repartidor.nombre} 👋`;
+        document.getElementById('header-date').textContent = fechaBonita();
+        cargarRuta();
+        cargarResumen();
+        // Refresca la ruta cada 60 segundos automáticamente
+        intervalRuta = setInterval(() => {
+            if (document.getElementById('tab-ruta').style.display !== 'none') cargarRuta();
+        }, 60000);
+    }
+
+    // ===== RUTA =====
+    async function cargarRuta() {
+        const cont = document.getElementById('lista-pedidos');
+        try {
+            const pedidos = await (await fetch(`${API}/pedidos/ruta/${repartidor.id}/${hoy()}`)).json();
+
+            const pendientes = pedidos.filter(p => p.estatus === 'pendiente').length;
+            const badge = document.getElementById('badge-pendientes');
+            badge.textContent = pendientes;
+            badge.style.display = pendientes > 0 ? 'inline' : 'none';
+
+            if (!pedidos.length) {
+                cont.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>No tienes pedidos asignados hoy.</p></div>`;
+                return;
+            }
+
+            // Primero los pendientes/reagendados, luego los entregados
+            const ordenados = [...pedidos].sort((a, b) => {
+                const prioA = a.estatus === 'pendiente' ? 0 : a.estatus === 'reagendado' ? 1 : 2;
+                const prioB = b.estatus === 'pendiente' ? 0 : b.estatus === 'reagendado' ? 1 : 2;
+                return prioA - prioB || (b.veces_reagendado - a.veces_reagendado);
+            });
+
+            cont.innerHTML = ordenados.map(p => tarjetaPedido(p)).join('');
+
+            // Botón "Ver ruta completa" con todas las direcciones pendientes
+            const direcciones = ordenados
+                .filter(p => p.estatus === 'pendiente' && p.direccion)
+                .map(p => encodeURIComponent(p.direccion));
+            const btnWrap = document.getElementById('btn-ruta-mapa-wrap');
+            const btnMapa = document.getElementById('btn-ruta-mapa');
+            if (direcciones.length > 0) {
+                const waypointsUrl = direcciones.length > 1
+                    ? `&waypoints=${direcciones.slice(0, -1).join('|')}&destination=${direcciones[direcciones.length - 1]}`
+                    : `&destination=${direcciones[0]}`;
+                btnMapa.href = `https://www.google.com/maps/dir/?api=1${waypointsUrl}&travelmode=driving`;
+                btnWrap.style.display = 'block';
+            } else {
+                btnWrap.style.display = 'none';
+            }
+        } catch (e) {
+            cont.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p>Error al cargar la ruta.</p></div>`;
+        }
+    }
+
+    function tarjetaPedido(p) {
+        const entregado  = p.estatus === 'entregado';
+        const reagendado = p.estatus === 'reagendado';
+        const critico    = p.veces_reagendado >= 2;
+
+        const badgeEstatus = entregado
+            ? '<span class="badge badge-entregado">✓ Entregado</span>'
+            : reagendado
+                ? '<span class="badge badge-reagendado">Reagendado</span>'
+                : critico
+                    ? '<span class="badge badge-alerta">⚠️ Prioridad</span>'
+                    : '<span class="badge badge-pendiente">Pendiente</span>';
+
+        const deuda = parseFloat(p.saldo_deudor) || 0;
+        const deudaHtml = deuda > 0
+            ? `<div class="card-row"><span class="icon">⚠️</span><span class="val deuda">Deuda previa: ${fmt$(deuda)}</span></div>`
+            : `<div class="card-row"><span class="icon">✅</span><span class="val ok">Sin deuda previa</span></div>`;
+
+        const tel   = p.telefono  ? `<a href="tel:${p.telefono}">📞 Llamar</a>` : '';
+        const maps  = p.direccion ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.direccion)}&travelmode=driving" target="_blank">🗺️ Navegar</a>` : '';
+        const links = (tel || maps) ? `<div class="card-links">${tel}${maps}</div>` : '';
+
+        const acciones = (!entregado && !reagendado) ? `
+            <div class="card-actions">
+                <button class="btn-action btn-entregar" onclick="abrirModalCobro(${p.id}, ${p.total})">✓ Entregar</button>
+                <button class="btn-action btn-reagendar" onclick="reagendar(${p.id})">↺ Reagendar</button>
+            </div>` : '';
+
+        const reagTag = p.veces_reagendado > 0 && !entregado
+            ? `<span class="badge badge-alerta" style="margin-left:6px;">↺ ${p.veces_reagendado}x</span>` : '';
+
+        const cardClass = entregado ? 'entregado' : reagendado ? 'reagendado' : critico ? 'critico' : '';
+
+        return `
+        <div class="pedido-card ${cardClass}">
+            <div class="card-header">
+                <div>
+                    <div class="card-folio">Pedido #${p.id} ${reagTag}</div>
+                    <div class="card-cliente">${p.cliente_nombre}</div>
+                </div>
+                ${badgeEstatus}
+            </div>
+            <div class="card-info">
+                <div class="card-row"><span class="icon">📍</span><span class="val">${p.direccion || 'Sin dirección'}</span></div>
+                ${p.contenido ? `<div class="card-row"><span class="icon">🍪</span><span class="val">${p.contenido}${p.piezas ? ' · ' + p.piezas + ' pzas' : ''}</span></div>` : ''}
+                <div class="card-row"><span class="icon">💵</span><span class="val highlight">A cobrar: ${fmt$(p.total)}</span></div>
+                ${deudaHtml}
+            </div>
+            ${links}
+            ${acciones}
+        </div>`;
+    }
+
+    // ===== MODAL COBRO =====
+    function abrirModalCobro(id, total) {
+        pedidoEnCurso = id;
+        document.getElementById('modal-sub').textContent = `Pedido #${id} · Total: ${fmt$(total)}`;
+        document.getElementById('modal-monto').value = Number(total).toFixed(2);
+        document.getElementById('modal-cobro').classList.remove('hidden');
+        setTimeout(() => document.getElementById('modal-monto').focus(), 100);
+    }
+    function cerrarModal() {
+        document.getElementById('modal-cobro').classList.add('hidden');
+        pedidoEnCurso = null;
+    }
+    async function confirmarEntrega() {
+        const monto = parseFloat(document.getElementById('modal-monto').value) || 0;
+        if (!pedidoEnCurso) return;
+        try {
+            const res = await fetch(`${API}/pedidos/${pedidoEnCurso}/entregar`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ monto_cobrado: monto })
+            });
+            if (res.ok) { cerrarModal(); cargarRuta(); cargarResumen(); }
+            else { const d = await res.json(); alert(d.mensaje); }
+        } catch { alert('Error de conexión'); }
+    }
+
+    // ===== REAGENDAR =====
+    async function reagendar(id) {
+        if (!confirm('¿Reagendar este pedido para mañana?')) return;
+        try {
+            await fetch(`${API}/pedidos/${id}/reagendar`, { method: 'PATCH' });
+            cargarRuta(); cargarResumen();
+        } catch { alert('Error de conexión'); }
+    }
+
+    // ===== GASTOS =====
+    const iconoGasto = { gasolina:'⛽', comida:'🍔', caseta:'🛣️', otro:'📌' };
+
+    async function cargarGastosLista() {
+        const wrap = document.getElementById('lista-gastos-dia');
+        if (!repartidor) return;
+        try {
+            const rows = await (await fetch(`${API}/gastos?repartidor_id=${repartidor.id}&fecha=${hoy()}`)).json();
+            if (!rows.length) {
+                wrap.innerHTML = '<div style="color:#94a3b8; font-size:0.9rem; text-align:center; padding:16px;">Sin gastos registrados hoy</div>';
+                return;
+            }
+            wrap.innerHTML = rows.map(g => `
+                <div style="background:#fff; border-radius:10px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+                    <div>
+                        <span style="font-size:1.1rem;">${iconoGasto[g.categoria] || '📌'}</span>
+                        <strong style="margin-left:8px; text-transform:capitalize;">${g.categoria}</strong>
+                    </div>
+                    <div style="font-weight:800; color:#dc2626; font-size:1.05rem;">$${Number(g.monto).toFixed(2)}</div>
+                </div>`).join('');
+        } catch {
+            wrap.innerHTML = '<div style="color:#94a3b8; font-size:0.9rem; text-align:center; padding:16px;">Error al cargar</div>';
+        }
+    }
+
+    document.getElementById('form-gastos').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msgEl = document.getElementById('gasto-msg');
+        const fd = new FormData();
+        fd.append('repartidor_id', repartidor.id);
+        fd.append('fecha', hoy());
+        fd.append('categoria', document.getElementById('gasto-categoria').value);
+        fd.append('monto', document.getElementById('gasto-monto').value);
+        const foto = document.getElementById('gasto-foto').files[0];
+        if (foto) fd.append('foto', foto);
+        try {
+            const res = await fetch(`${API}/gastos`, { method: 'POST', body: fd });
+            const data = await res.json();
+            msgEl.className = `gasto-msg ${res.ok ? 'ok' : 'err'}`;
+            msgEl.style.display = 'block';
+            msgEl.textContent = data.mensaje;
+            if (res.ok) { e.target.reset(); cargarResumen(); cargarGastosLista(); }
+        } catch { msgEl.className = 'gasto-msg err'; msgEl.style.display = 'block'; msgEl.textContent = 'Error de conexión'; }
+        setTimeout(() => msgEl.style.display = 'none', 4000);
+    });
+
+    // ===== RESUMEN =====
+    async function cargarResumen() {
+        try {
+            const [r, pedidos] = await Promise.all([
+                fetch(`${API}/pedidos/resumen/${repartidor.id}/${hoy()}`).then(r => r.json()),
+                fetch(`${API}/pedidos/ruta/${repartidor.id}/${hoy()}`).then(r => r.json())
+            ]);
+            const pendientes = Array.isArray(pedidos) ? pedidos.filter(p => p.estatus === 'pendiente').length : 0;
+            const cobrado = Number(r.cobrado);
+            const gastos  = Number(r.gastos);
+            const neto    = cobrado - gastos;
+
+            document.getElementById('res-entregados').textContent = r.entregados;
+            document.getElementById('res-pendientes').textContent = pendientes;
+            document.getElementById('res-cobrado').textContent = fmt$(cobrado);
+            document.getElementById('res-gastos').textContent  = fmt$(gastos);
+            const netoEl = document.getElementById('res-neto');
+            netoEl.textContent = fmt$(neto);
+            netoEl.className = `stat-value ${neto >= 0 ? 'verde' : 'rojo'}`;
+        } catch (e) { console.error(e); }
+    }
+
+    // ===== NAVEGACIÓN =====
+    function switchTab(tab, btn) {
+        ['ruta','gastos','resumen'].forEach(t => {
+            document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
         });
+        if (tab === 'gastos') cargarGastosLista();
+        if (tab === 'resumen') cargarResumen();
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (tab === 'resumen') cargarResumen();
+    }
 
-        // Cargar Ruta
-        async function iniciarApp(repartidor) {
-            document.getElementById('login-view').style.display = "none";
-            document.getElementById('app-view').style.display = "flex";
-            document.getElementById('welcome-msg').textContent = `Hola, ${repartidor.nombre}`;
-            
-            const fechaHoy = new Date().toISOString().split('T')[0];
-            const listaPedidos = document.getElementById('lista-pedidos');
+    document.getElementById('btn-logout').addEventListener('click', () => {
+        clearInterval(intervalRuta);
+        sessionStorage.removeItem('repartidor');
+        repartidor = null;
+        pinActual = '';
+        actualizarDots();
+        document.getElementById('app-view').style.display = 'none';
+        document.getElementById('login-view').style.display = 'flex';
+    });
 
-            try {
-                const response = await fetch(`http://localhost:3001/api/pedidos/ruta/${repartidor.id}/${fechaHoy}`);
-                const pedidos = await response.json();
+    // ===== AUTO-LOGIN si hay sesión guardada =====
+    window.onload = () => {
+        const s = sessionStorage.getItem('repartidor');
+        if (s) { repartidor = JSON.parse(s); iniciarApp(); }
+    };
+</script>
 
-                listaPedidos.innerHTML = '';
-                if (pedidos.length === 0) listaPedidos.innerHTML = '<p style="color:#64748b;">No tienes pedidos asignados hoy.</p>';
-
-                pedidos.forEach(pedido => {
-                    listaPedidos.innerHTML += `
-                        <div style="background: ${pedido.estatus === 'entregado' ? '#dcfce3' : '#f8fafc'}; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #e2e8f0;">
-                            <h3>Pedido #${pedido.id}</h3>
-                            <p><strong>Cliente:</strong> ${pedido.cliente_nombre}</p>
-                            <p><strong>Total:</strong> $${pedido.total}</p>
-                            <p><strong>Estatus:</strong> ${pedido.estatus.toUpperCase()}</p>
-                            ${pedido.estatus === 'pendiente' ? `
-                                <div style="display:flex; gap:10px; margin-top:10px;">
-                                    <button onclick="ejecutarAccion(${pedido.id}, 'entregar')" style="flex:1; padding:10px; background:#16a34a; color:white; border:none; border-radius:5px;">Entregar</button>
-                                    <button onclick="ejecutarAccion(${pedido.id}, 'reagendar')" style="flex:1; padding:10px; background:#dc2626; color:white; border:none; border-radius:5px;">Reagendar</button>
-                                </div>
-                            ` : ''}
-                        </div>
-                    `;
-                });
-            } catch (e) { listaPedidos.innerHTML = 'Error al cargar.'; }
-        }
-
-        async function ejecutarAccion(id, accion) {
-            await fetch(`http://localhost:3001/api/pedidos/${id}/${accion}`, { method: 'PATCH' });
-            iniciarApp(JSON.parse(sessionStorage.getItem('repartidor')));
-        }
-
-        // Navegación
-        function switchTab(tabId, btnElement) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-            document.getElementById(`tab-${tabId}`).classList.add('active');
-            btnElement.classList.add('active');
-        }
-
-        document.getElementById('btn-logout').addEventListener('click', () => {
-            sessionStorage.removeItem('repartidor');
-            window.location.reload();
-        });
-
-        window.onload = () => {
-            const session = sessionStorage.getItem('repartidor');
-            if (session) iniciarApp(JSON.parse(session));
-        };
-    </script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw-repartidor.js').catch(() => {});
+  }
+</script>
 </body>
 </html>

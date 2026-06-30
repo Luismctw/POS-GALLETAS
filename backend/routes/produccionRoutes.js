@@ -1,11 +1,28 @@
 const express = require('express');
 const router = express.Router();
-// Aquí en la línea 3 importamos la nueva función del controlador:
-const { obtenerInsumos, registrarProduccion, registrarEntradaInsumo, crearProductoConReceta } = require('../controllers/produccionController');
+const {
+    obtenerInsumos,
+    crearInsumo,
+    obtenerProductos,
+    obtenerProductosConReceta,
+    crearProductoConReceta,
+    producirPorReceta,
+    registrarEntradaTerceros
+} = require('../controllers/produccionController');
 
+// Almacén de materia prima
 router.get('/insumos', obtenerInsumos);
-router.post('/', registrarProduccion);
-router.post('/insumos/entrada', registrarEntradaInsumo);
-router.post('/nuevo-producto', crearProductoConReceta); // <--- NUEVA RUTA CONECTADA
+router.post('/insumos', crearInsumo);
+
+// Almacén de producto terminado
+router.get('/productos', obtenerProductos);
+router.get('/recetas', obtenerProductosConReceta);
+router.post('/nuevo-producto', crearProductoConReceta);
+
+// Producir por receta (descuenta materia prima y suma producto terminado)
+router.post('/producir', producirPorReceta);
+
+// Entrada de stock para productos de terceros (reventa)
+router.post('/terceros/entrada', registrarEntradaTerceros);
 
 module.exports = router;

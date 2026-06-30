@@ -1,5 +1,12 @@
 {
-  "dependencies": {
-    "multer": "^2.1.1"
+  "name": "pos-galletas",
+  "version": "1.0.0",
+  "description": "Sistema POS para distribución de galletas",
+  "scripts": {
+    "start": "node backend/server.js",
+    "postinstall": "cd backend && npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
