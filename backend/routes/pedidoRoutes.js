@@ -14,6 +14,7 @@ const {
     obtenerControlCarga,
     registrarRetorno,
     cancelarPedido,
+    corregirCobro,
     obtenerContenidos
 } = require('../controllers/pedidoController');
 
@@ -36,5 +37,6 @@ router.patch('/:id/asignar', asignarPedido);           // asignar repartidor
 router.patch('/:id/entregar', entregarPedido);
 router.patch('/:id/reagendar', reagendarPedido);
 router.patch('/:id/cancelar', cancelarPedido);
+router.patch('/:id/corregir-cobro', corregirCobro);
 
 module.exports = router;

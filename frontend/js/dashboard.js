@@ -275,7 +275,10 @@ async function cargarPedidosMonitor() {
         pedidos.forEach(p => {
             const color = p.estatus === 'entregado' ? 'green' : (p.estatus === 'reagendado' ? 'orange' : (p.estatus === 'creado' ? 'gray' : (p.estatus === 'cancelado' ? '#dc2626' : 'blue')));
             const accion = p.estatus === 'pendiente'
-                ? `<button onclick="entregarAdmin(${p.id})" style="padding:5px 10px; background:#16a34a; font-size:12px; width:auto;">✔️ Entregar</button>` : '-';
+                ? `<button onclick="entregarAdmin(${p.id})" style="padding:5px 10px; background:#16a34a; font-size:12px; width:auto;">✔️ Entregar</button>`
+                : (p.estatus === 'entregado'
+                    ? `<button onclick="corregirCobro(${p.id}, ${p.monto_cobrado ?? p.total})" style="padding:4px 8px; background:#f59e0b; color:#fff; font-size:11px; width:auto;">✏️ Corregir cobro</button>`
+                    : '-');
             const cancelBtn = !['entregado','cancelado'].includes(p.estatus)
                 ? `<button onclick="cancelarPedido(${p.id})" style="padding:4px 8px; background:#dc2626; font-size:11px; width:auto;">✕ Cancelar</button>` : '-';
             const antig = p.dias_antiguedad > 0 ? `${p.dias_antiguedad} días${p.veces_reagendado ? ' · ' + p.veces_reagendado + 'x' : ''}` : 'Hoy';
@@ -286,6 +289,23 @@ async function cargarPedidosMonitor() {
                 <td>${antig}</td><td>${accion}</td><td>${cancelBtn}</td></tr>`;
         });
     } catch (e) { tbody.innerHTML = '<tr><td colspan="9">Error al cargar el monitor</td></tr>'; }
+}
+
+async function corregirCobro(id, montoActual) {
+    const nuevo = prompt(`Pedido #${id}\nMonto cobrado actual: $${Number(montoActual).toFixed(2)}\n\n¿Cuánto se cobró realmente?`, Number(montoActual).toFixed(2));
+    if (nuevo === null) return;
+    const monto = parseFloat(nuevo);
+    if (isNaN(monto) || monto < 0) { alert('Monto inválido'); return; }
+    try {
+        const res  = await fetch(`${API}/pedidos/${id}/corregir-cobro`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ monto_cobrado: monto })
+        });
+        const data = await res.json();
+        alert(res.ok ? `✅ ${data.mensaje}` : `Error: ${data.mensaje}`);
+        if (res.ok) cargarPedidosMonitor();
+    } catch (e) { alert('Error de conexión'); }
 }
 
 async function entregarAdmin(id) {
@@ -372,7 +392,7 @@ async function imprimirRuta() {
                 @media print { button { display: none; } }
             </style>
         </head><body>
-            <h1>🍪 Ruta del día — POS Galletas</h1>
+            <h1>🍪 Ruta del día — INGU</h1>
             <p>${hoy} &nbsp;·&nbsp; ${pendientes.length} pedidos pendientes</p>
             <table>
                 <thead><tr><th>Folio</th><th>Cliente</th><th>Repartidor</th><th>Contenido</th><th>Piezas</th><th>Total</th><th>Firma</th></tr></thead>

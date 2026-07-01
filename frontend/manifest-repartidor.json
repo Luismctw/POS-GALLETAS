@@ -1,7 +1,7 @@
 {
-  "name": "POS Galletas – Repartidor",
-  "short_name": "Repartidor",
-  "description": "App de ruta para repartidores POS Galletas",
+  "name": "INGU Repartidores",
+  "short_name": "INGU Repartidores",
+  "description": "App de ruta para repartidores INGU",
   "start_url": "/ruta_movil.html",
   "scope": "/",
   "display": "standalone",

@@ -96,7 +96,7 @@ const obtenerPedidos = async (req, res) => {
     try {
         const [pedidos] = await db.query(`
             SELECT p.id, c.nombre AS cliente, IFNULL(r.nombre, 'Sin asignar') AS repartidor,
-                   p.contenido, p.piezas, p.total, p.estatus, p.veces_reagendado,
+                   p.contenido, p.piezas, p.total, p.monto_cobrado, p.estatus, p.veces_reagendado,
                    DATE_FORMAT(p.fecha, '%Y-%m-%d') AS fecha,
                    DATEDIFF(CURDATE(), p.fecha_creacion) AS dias_antiguedad
             FROM pedidos p
@@ -356,6 +356,37 @@ const registrarRetorno = async (req, res) => {
     }
 };
 
+// Corregir el monto cobrado de un pedido ya entregado (ajusta saldo del cliente)
+const corregirCobro = async (req, res) => {
+    const { id } = req.params;
+    const nuevo_monto = parseFloat(req.body.monto_cobrado);
+    if (isNaN(nuevo_monto) || nuevo_monto < 0)
+        return res.status(400).json({ mensaje: 'Monto inválido' });
+    try {
+        await db.query('START TRANSACTION');
+        const [pedido] = await db.query(
+            "SELECT cliente_id, monto_cobrado, estatus FROM pedidos WHERE id = ?", [id]
+        );
+        if (!pedido.length) { await db.query('ROLLBACK'); return res.status(404).json({ mensaje: 'Pedido no encontrado' }); }
+        if (pedido[0].estatus !== 'entregado') { await db.query('ROLLBACK'); return res.status(400).json({ mensaje: 'Solo se puede corregir un pedido entregado' }); }
+
+        const viejo_monto = parseFloat(pedido[0].monto_cobrado) || 0;
+        const diferencia  = viejo_monto - nuevo_monto; // positivo = cobró de más (devolver deuda), negativo = cobró de menos (aumentar deuda)
+
+        await db.query("UPDATE pedidos SET monto_cobrado = ? WHERE id = ?", [nuevo_monto, id]);
+        await db.query(
+            "UPDATE clientes SET saldo_deudor = GREATEST(0, saldo_deudor + ?) WHERE id = ?",
+            [diferencia, pedido[0].cliente_id]
+        );
+        await db.query('COMMIT');
+        res.json({ mensaje: `Cobro corregido. Antes: $${viejo_monto.toFixed(2)} → Ahora: $${nuevo_monto.toFixed(2)}` });
+    } catch (e) {
+        await db.query('ROLLBACK');
+        console.error('Error al corregir cobro:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
 // Cancelar un pedido y revertir el saldo del cliente
 const cancelarPedido = async (req, res) => {
     const { id } = req.params;
@@ -401,5 +432,6 @@ module.exports = {
     obtenerControlCarga,
     registrarRetorno,
     cancelarPedido,
+    corregirCobro,
     obtenerContenidos
 };

@@ -1,7 +1,7 @@
 {
-  "name": "POS Galletas – Admin",
-  "short_name": "POS Galletas",
-  "description": "Panel de administración POS Galletas",
+  "name": "INGU – Admin",
+  "short_name": "INGU",
+  "description": "Panel de administración INGU",
   "start_url": "/dashboard.html",
   "scope": "/",
   "display": "standalone",
