@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS `productos` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nombre` varchar(100) NOT NULL,
   `precio_caja` decimal(10,2) DEFAULT NULL,
-  `tipo` enum('propio','tercero') DEFAULT 'propio',
+  `tipo` enum('propio','tercero','combinada') DEFAULT 'propio',
   `bodega_asignada` varchar(100) DEFAULT 'Bodega Central',
   `stock_actual` int DEFAULT '0',
   PRIMARY KEY (`id`)

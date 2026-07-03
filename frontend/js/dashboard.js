@@ -513,6 +513,7 @@ async function cargarBodegas() {
     } catch (e) { _bodegasCache = []; }
     poblarSelectBodegas('insumo_ubicacion');
     poblarSelectBodegas('nuevo_prod_bodega');
+    poblarSelectBodegas('combo-bodega');
     renderListaBodegas();
 }
 
@@ -712,7 +713,7 @@ async function cargarProductoTerminado() {
             const items = productos.filter(p => String(p.bodega_asignada) === bname);
             const filas = items.length
                 ? items.map(p => {
-                    const acciones = p.tipo === 'tercero'
+                    const acciones = p.tipo !== 'propio'
                         ? `<button onclick="editarProductoTercero(${esc(p.id)})" title="Editar" style="padding:3px 8px; font-size:0.78rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;">✏️</button>
                            <button onclick="eliminarProducto(${esc(p.id)}, ${esc(JSON.stringify(p.nombre))})" title="Eliminar" style="margin-left:4px; padding:3px 8px; font-size:0.78rem; background:#ef4444; color:#fff; border:none; border-radius:6px; cursor:pointer;">🗑</button>`
                         : '<small style="color:#94a3b8;">—</small>';
@@ -817,8 +818,79 @@ async function cargarRecetasProducir() {
         recetasCache = await (await fetch(`${API}/produccion/recetas`)).json();
         const sel = document.getElementById('producir_producto');
         sel.innerHTML = '<option value="">Selecciona una receta...</option>';
-        recetasCache.forEach(p => sel.innerHTML += `<option value="${p.id}">${p.nombre} (stock: ${p.stock_actual})</option>`);
+        recetasCache.forEach(p => sel.innerHTML += `<option value="${p.id}">${esc(p.nombre)} (stock: ${esc(p.stock_actual)})</option>`);
+        renderComboSabores();
     } catch (e) { console.error(e); }
+}
+
+// #11 · Casillas de sabores para la caja combinada (recetas individuales)
+function renderComboSabores() {
+    const cont = document.getElementById('combo-sabores');
+    if (!cont) return;
+    if (!recetasCache.length) {
+        cont.innerHTML = '<span style="color:#94a3b8; font-size:0.85rem;">No hay recetas individuales todavía. Crea sabores en "Crear Producto / Receta".</span>';
+        return;
+    }
+    cont.innerHTML = recetasCache.map(p => `
+        <label style="display:inline-flex; align-items:center; gap:6px; background:#fdf2f8; border:1px solid #fbcfe8; border-radius:8px; padding:6px 10px; cursor:pointer; font-size:0.88rem;">
+            <input type="checkbox" class="combo-sabor" value="${esc(p.id)}" onchange="previewCombo()"> ${esc(p.nombre)}
+        </label>`).join('');
+}
+
+function saboresComboSeleccionados() {
+    return [...document.querySelectorAll('.combo-sabor:checked')].map(c => parseInt(c.value));
+}
+
+// #11 · Vista previa: reparte la materia prima 1/N entre los sabores marcados
+function previewCombo() {
+    const prev = document.getElementById('combo-preview');
+    if (!prev) return;
+    const ids = saboresComboSeleccionados();
+    const cajas = parseInt(document.getElementById('combo-cantidad').value) || 0;
+    if (ids.length < 2 || !cajas) { prev.style.display = 'none'; return; }
+    const N = ids.length;
+    const acum = {}; // insumo -> { nombre, unidad, porCaja, stock }
+    ids.forEach(id => {
+        const p = recetasCache.find(r => r.id === id);
+        if (!p || !p.receta) return;
+        p.receta.forEach(ing => {
+            if (!acum[ing.insumo_id]) acum[ing.insumo_id] = { nombre: ing.nombre, unidad: ing.unidad_medida, porCaja: 0, stock: parseFloat(ing.stock_actual) };
+            acum[ing.insumo_id].porCaja += parseFloat(ing.cantidad_necesaria) / N;
+        });
+    });
+    const filas = Object.values(acum).map(a => {
+        const req = parseFloat((a.porCaja * cajas).toFixed(4));
+        const falta = a.stock < req;
+        return `${req} ${esc(a.unidad)} de ${esc(a.nombre)} ${falta ? '<span style="color:#dc2626;">(¡falta! hay ' + a.stock + ')</span>' : ''}`;
+    }).join('<br>');
+    prev.style.display = 'block';
+    prev.innerHTML = `<strong>Materia prima a descontar (${N} sabores, ${cajas} cajas):</strong><br>${filas || 'Los sabores marcados no tienen receta.'}`;
+}
+
+// #11 · Producir la caja combinada
+async function producirCombo() {
+    const el = document.getElementById('mensaje-combo');
+    const sabores = saboresComboSeleccionados();
+    const cantidad = parseInt(document.getElementById('combo-cantidad').value) || 0;
+    const precio_caja = document.getElementById('combo-precio').value;
+    const bodega_asignada = document.getElementById('combo-bodega').value;
+    if (sabores.length < 2) return msg(el, false, 'Marca al menos 2 sabores.');
+    if (!cantidad) return msg(el, false, 'Indica cuántas cajas vas a producir.');
+    if (precio_caja === '' || isNaN(parseFloat(precio_caja))) return msg(el, false, 'Indica el precio de venta de la caja.');
+    try {
+        const res = await fetch(`${API}/produccion/producir-combo`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sabores, cantidad, precio_caja: parseFloat(precio_caja), bodega_asignada })
+        });
+        const data = await res.json();
+        msg(el, res.ok, data.mensaje);
+        if (res.ok) {
+            document.querySelectorAll('.combo-sabor:checked').forEach(c => c.checked = false);
+            document.getElementById('combo-precio').value = '';
+            document.getElementById('combo-preview').style.display = 'none';
+            cargarInsumos();
+        }
+    } catch (e) { msg(el, false, 'Error de conexión'); }
 }
 
 document.getElementById('producir_producto').addEventListener('change', actualizarPreviewReceta);

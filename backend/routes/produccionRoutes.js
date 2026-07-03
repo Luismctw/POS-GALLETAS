@@ -15,7 +15,8 @@ const {
     editarInsumo,
     obtenerBodegas,
     crearBodega,
-    eliminarBodega
+    eliminarBodega,
+    producirComboPorPorcentaje
 } = require('../controllers/produccionController');
 
 // Bodegas dinámicas
@@ -39,6 +40,9 @@ router.delete('/productos/:id', eliminarProducto);
 
 // Producir por receta (descuenta materia prima y suma producto terminado)
 router.post('/producir', producirPorReceta);
+
+// #11 · Producir caja combinada por porcentajes (sabores individuales)
+router.post('/producir-combo', producirComboPorPorcentaje);
 
 // Entrada de stock para productos de terceros (reventa)
 router.post('/terceros/entrada', registrarEntradaTerceros);

@@ -314,6 +314,22 @@
                     <div id="mensaje-producir" class="mensaje"></div>
                 </div>
             </div>
+            <!-- Producir caja combinada (#11) -->
+            <div class="card" style="border-left:4px solid #db2777; margin-top:20px;">
+                <h3 style="color:#db2777;">🎨 Producir Caja Combinada</h3>
+                <p style="margin-bottom:12px; color:#64748b; font-size:0.9rem;">Marca los sabores que lleva la caja. El sistema reparte la materia prima en partes iguales entre los sabores (según sus recetas individuales) y descuenta lo proporcional. El precio de venta lo pones tú.</p>
+                <div class="form-group"><label>Sabores en la caja (marca 2 o más):</label>
+                    <div id="combo-sabores" style="display:flex; flex-wrap:wrap; gap:8px; max-height:220px; overflow-y:auto; padding:4px;"></div>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div class="form-group" style="flex:1; min-width:120px;"><label>Cajas a producir:</label><input type="number" id="combo-cantidad" min="1" value="1" oninput="previewCombo()"></div>
+                    <div class="form-group" style="flex:1; min-width:120px;"><label>Precio venta caja ($):</label><input type="number" id="combo-precio" step="0.01" min="0" placeholder="0.00"></div>
+                    <div class="form-group" style="flex:1; min-width:140px;"><label>Bodega:</label><select id="combo-bodega"></select></div>
+                </div>
+                <div id="combo-preview" style="background:#fdf2f8; border:1px solid #fbcfe8; border-radius:8px; padding:12px; margin-bottom:12px; font-size:0.88rem; color:#9d174f; display:none;"></div>
+                <button type="button" class="btn-success" style="background:#db2777;" onclick="producirCombo()">Producir Caja Combinada</button>
+                <div id="mensaje-combo" class="mensaje"></div>
+            </div>
         </div>
 
         <!-- ============ COMPRAS ============ -->
