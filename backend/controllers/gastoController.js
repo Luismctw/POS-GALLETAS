@@ -40,4 +40,35 @@ const obtenerGastosRepartidor = async (req, res) => {
     }
 };
 
-module.exports = { registrarGasto, obtenerGastosRepartidor };
+// Editar un gasto (categoría, monto, descripción)
+const editarGasto = async (req, res) => {
+    const { id } = req.params;
+    const { categoria, monto, descripcion } = req.body;
+    if (!monto) return res.status(400).json({ mensaje: 'Falta el monto' });
+    try {
+        const [r] = await db.query(
+            "UPDATE gastos SET categoria = COALESCE(?, categoria), monto = ?, descripcion = ? WHERE id = ?",
+            [categoria || null, monto, descripcion || null, id]
+        );
+        if (r.affectedRows === 0) return res.status(404).json({ mensaje: 'Gasto no encontrado' });
+        res.json({ mensaje: 'Gasto actualizado' });
+    } catch (e) {
+        console.error('Error al editar gasto:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+// Eliminar un gasto
+const eliminarGasto = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [r] = await db.query("DELETE FROM gastos WHERE id = ?", [id]);
+        if (r.affectedRows === 0) return res.status(404).json({ mensaje: 'Gasto no encontrado' });
+        res.json({ mensaje: 'Gasto eliminado' });
+    } catch (e) {
+        console.error('Error al eliminar gasto:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+module.exports = { registrarGasto, obtenerGastosRepartidor, editarGasto, eliminarGasto };

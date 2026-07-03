@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const { registrarGasto, obtenerGastosRepartidor } = require('../controllers/gastoController');
+const { registrarGasto, obtenerGastosRepartidor, editarGasto, eliminarGasto } = require('../controllers/gastoController');
 
 // Ruta absoluta para uploads (funciona igual en local y en Hostinger)
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
@@ -17,5 +17,7 @@ const upload = multer({ storage });
 
 router.get('/',  obtenerGastosRepartidor);
 router.post('/', upload.single('foto'), registrarGasto);
+router.put('/:id', editarGasto);
+router.delete('/:id', eliminarGasto);
 
 module.exports = router;

@@ -333,6 +333,38 @@ const eliminarProducto = async (req, res) => {
     }
 };
 
+// Editar materia prima completa (nombre, unidad, mínimo, stock, costo, bodega)
+const editarInsumo = async (req, res) => {
+    const { id } = req.params;
+    const { nombre, unidad_medida, stock_minimo, stock_actual, costo_unitario, ubicacion } = req.body;
+    if (!nombre) return res.status(400).json({ mensaje: 'El nombre es obligatorio' });
+    const unidad = UNIDADES_VALIDAS.includes(unidad_medida) ? unidad_medida : null;
+    try {
+        const [r] = await db.query(
+            `UPDATE insumos SET
+                nombre = ?,
+                unidad_medida = COALESCE(?, unidad_medida),
+                stock_minimo = COALESCE(?, stock_minimo),
+                stock_actual = COALESCE(?, stock_actual),
+                costo_unitario = COALESCE(?, costo_unitario),
+                ubicacion = COALESCE(?, ubicacion)
+             WHERE id = ?`,
+            [
+                nombre, unidad,
+                stock_minimo != null && stock_minimo !== '' ? stock_minimo : null,
+                stock_actual != null && stock_actual !== '' ? stock_actual : null,
+                costo_unitario != null && costo_unitario !== '' ? costo_unitario : null,
+                ubicacion || null, id
+            ]
+        );
+        if (r.affectedRows === 0) return res.status(404).json({ mensaje: 'Materia prima no encontrada' });
+        res.json({ mensaje: 'Materia prima actualizada' });
+    } catch (e) {
+        console.error('Error al editar insumo:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
 // Eliminar una materia prima (insumo). Se bloquea si está en uso en alguna receta.
 const eliminarInsumo = async (req, res) => {
     const { id } = req.params;
@@ -366,6 +398,7 @@ module.exports = {
     editarProducto,
     eliminarProducto,
     eliminarInsumo,
+    editarInsumo,
     obtenerBodegas,
     crearBodega,
     eliminarBodega

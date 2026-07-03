@@ -567,6 +567,7 @@ async function cargarInsumos() {
     const tbody = document.getElementById('tabla-insumos');
     try {
         const insumos = await (await fetch(`${API}/produccion/insumos`)).json();
+        _insumosCache = insumos;
         tbody.innerHTML = '';
         let contadorBajo = 0;
         insumos.forEach(i => {
@@ -589,6 +590,7 @@ async function cargarInsumos() {
                 <td style="white-space:nowrap;">
                     <select id="bodega-sel-${i.id}" style="font-size:0.8rem; padding:3px 6px; border-radius:6px; border:1px solid #cbd5e1;">${opsBodega}</select>
                     <button onclick="cambiarBodegaInsumo(${i.id})" style="margin-left:4px; padding:3px 8px; font-size:0.78rem; background:#3b82f6; color:#fff; border:none; border-radius:6px; cursor:pointer;">Mandar</button>
+                    <button onclick="editarInsumo(${esc(i.id)})" title="Editar materia prima" style="margin-left:4px; padding:3px 8px; font-size:0.78rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;">✏️</button>
                     <button onclick="eliminarInsumo(${esc(i.id)}, ${esc(JSON.stringify(i.nombre))})" title="Eliminar materia prima" style="margin-left:4px; padding:3px 8px; font-size:0.78rem; background:#ef4444; color:#fff; border:none; border-radius:6px; cursor:pointer;">🗑</button>
                 </td></tr>`;
         });
@@ -598,6 +600,39 @@ async function cargarInsumos() {
             document.getElementById('stock-bajo-count').textContent = contadorBajo;
         }
     } catch (e) { tbody.innerHTML = '<tr><td colspan="6">Error al cargar</td></tr>'; }
+}
+
+let _insumosCache = [];
+
+// #10 · Editar materia prima completa (nombre, unidad, mínimo, stock, costo)
+async function editarInsumo(id) {
+    const i = _insumosCache.find(x => String(x.id) === String(id));
+    if (!i) return;
+    const nombre = prompt('Nombre de la materia prima:', i.nombre);
+    if (nombre === null) return;
+    const unidad = prompt('Unidad (kg, g, lt, ml, pza, ton):', i.unidad_medida);
+    if (unidad === null) return;
+    const minimo = prompt('Stock mínimo (alerta):', i.stock_minimo);
+    if (minimo === null) return;
+    const stock = prompt('Stock actual (corrección manual):', i.stock_actual);
+    if (stock === null) return;
+    const costo = prompt('Costo unitario ($):', i.costo_unitario);
+    if (costo === null) return;
+    try {
+        const res = await fetch(`${API}/produccion/insumos/${id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nombre: nombre.trim(),
+                unidad_medida: unidad.trim(),
+                stock_minimo: minimo,
+                stock_actual: stock,
+                costo_unitario: costo
+            })
+        });
+        const data = await res.json();
+        if (res.ok) cargarInsumos();
+        else alert(data.mensaje || 'No se pudo editar');
+    } catch (e) { alert('Error de conexión'); }
 }
 
 // #10 · Eliminar materia prima (bloqueada por el backend si está en una receta)
@@ -877,13 +912,32 @@ document.getElementById('form-compra').addEventListener('submit', async (e) => {
 
 async function cargarTicketsCompra() {
     const tbody = document.getElementById('tabla-tickets-compra');
+    const tfoot = document.getElementById('tfoot-tickets-compra');
     try {
         const compras = await (await fetch(`${API}/compras`)).json();
-        tbody.innerHTML = compras.length ? '' : '<tr><td colspan="6">Sin compras registradas.</td></tr>';
+        tbody.innerHTML = compras.length ? '' : '<tr><td colspan="7">Sin compras registradas.</td></tr>';
+        let total = 0;
         compras.forEach(c => {
-            tbody.innerHTML += `<tr><td>${c.fecha}</td><td><strong>${c.insumo}</strong></td><td>${c.proveedor}</td><td>${c.cantidad} ${c.unidad_medida}</td><td>$${Number(c.costo_unitario).toFixed(2)}</td><td><strong>$${Number(c.costo_total).toFixed(2)}</strong></td></tr>`;
+            total += Number(c.costo_total);
+            tbody.innerHTML += `<tr><td>${esc(c.fecha)}</td><td><strong>${esc(c.insumo)}</strong></td><td>${esc(c.proveedor)}</td><td>${esc(c.cantidad)} ${esc(c.unidad_medida)}</td><td>$${Number(c.costo_unitario).toFixed(2)}</td><td><strong>$${Number(c.costo_total).toFixed(2)}</strong></td>
+                <td><button onclick="eliminarCompra(${esc(c.id)})" title="Borrar ticket" style="padding:3px 8px; font-size:0.78rem; background:#ef4444; color:#fff; border:none; border-radius:6px; cursor:pointer;">🗑</button></td></tr>`;
         });
-    } catch (e) { tbody.innerHTML = '<tr><td colspan="6">Error al cargar</td></tr>'; }
+        // #9 · Total al final
+        if (tfoot) tfoot.innerHTML = compras.length
+            ? `<tr style="background:#f1f5f9; font-weight:800;"><td colspan="5" style="text-align:right;">TOTAL de compras:</td><td style="color:#dc2626;">$${total.toFixed(2)}</td><td></td></tr>`
+            : '';
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="7">Error al cargar</td></tr>'; if (tfoot) tfoot.innerHTML = ''; }
+}
+
+// #8 · Eliminar ticket de compra (revierte el stock)
+async function eliminarCompra(id) {
+    if (!confirm('¿Borrar este ticket de compra?\n\nSe restará del stock la cantidad que había sumado.')) return;
+    try {
+        const res = await fetch(`${API}/compras/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) { cargarTicketsCompra(); cargarAnalisisCompras(); }
+        else alert(data.mensaje || 'No se pudo borrar');
+    } catch (e) { alert('Error de conexión'); }
 }
 
 async function cargarAnalisisCompras() {
@@ -986,30 +1040,60 @@ async function cargarContabProduccion() {
 }
 
 // ====================== CLIENTES ======================
+let _clientesTablaCache = [];
+
 async function cargarClientes() {
     const tbody = document.getElementById('tabla-clientes');
     try {
-        const clientes = await (await fetch(`${API}/clientes`)).json();
-        tbody.innerHTML = '';
-        clientes.forEach(c => {
-            const bloqueado = c.estatus === 'bloqueado';
-            const deuda = parseFloat(c.saldo_deudor);
-            tbody.innerHTML += `<tr style="${bloqueado ? 'opacity:0.6; background:#fff5f5;' : ''}">
-                <td>${c.id}</td>
-                <td><strong>${c.nombre}</strong><br><small style="color:#64748b;">${c.telefono || ''}</small></td>
-                <td><small>${c.direccion || '-'}</small></td>
-                <td>$${Number(c.limite_credito).toFixed(2)}</td>
-                <td style="font-weight:bold; color:${deuda > 0 ? '#dc2626' : '#16a34a'};">$${deuda.toFixed(2)}</td>
-                <td><span style="background:${bloqueado ? '#fee2e2' : '#dcfce7'}; color:${bloqueado ? '#dc2626' : '#16a34a'}; padding:2px 8px; border-radius:10px; font-size:0.8rem; font-weight:bold;">${c.estatus}</span></td>
-                <td style="white-space:nowrap;">
-                    <button onclick="abrirEditarCliente(${c.id},${esc(JSON.stringify(c.nombre))},${esc(JSON.stringify(c.direccion||''))},${esc(JSON.stringify(c.telefono||''))},${c.limite_credito})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px;">✏️ Editar</button>
-                    <button onclick="toggleBloqueoCliente(${c.id},${esc(JSON.stringify(c.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:${bloqueado ? '#16a34a' : '#dc2626'};">${bloqueado ? '🔓 Desbloquear' : '🔒 Bloquear'}</button>
-                    ${deuda > 0 ? `<button onclick="cobrarCliente(${c.id},${esc(JSON.stringify(c.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:#2563eb;">💰 Cobrar</button>` : ''}
-                    <button onclick="verHistorial(${c.id},${esc(JSON.stringify(c.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:#64748b;">📋 Historial</button>
-                </td>
-            </tr>`;
-        });
+        _clientesTablaCache = await (await fetch(`${API}/clientes`)).json();
+        const buscar = document.getElementById('clientes-buscar');
+        if (buscar) buscar.value = '';
+        pintarTablaClientes(_clientesTablaCache);
     } catch (e) { tbody.innerHTML = '<tr><td colspan="7">Error al cargar</td></tr>'; }
+}
+
+// #5b · Filtrar la tabla de clientes por nombre o teléfono
+function filtrarClientesTabla() {
+    const q = (document.getElementById('clientes-buscar').value || '').toLowerCase().trim();
+    const f = q
+        ? _clientesTablaCache.filter(c => String(c.nombre).toLowerCase().includes(q) || String(c.telefono || '').toLowerCase().includes(q))
+        : _clientesTablaCache;
+    pintarTablaClientes(f);
+}
+
+function pintarTablaClientes(clientes) {
+    const tbody = document.getElementById('tabla-clientes');
+    if (!clientes.length) { tbody.innerHTML = '<tr><td colspan="7" style="color:#94a3b8;">Sin clientes</td></tr>'; return; }
+    tbody.innerHTML = clientes.map(c => {
+        const bloqueado = c.estatus === 'bloqueado';
+        const deuda = parseFloat(c.saldo_deudor);
+        return `<tr style="${bloqueado ? 'opacity:0.6; background:#fff5f5;' : ''}">
+            <td>${esc(c.id)}</td>
+            <td><strong>${esc(c.nombre)}</strong><br><small style="color:#64748b;">${esc(c.telefono) || ''}</small></td>
+            <td><small>${esc(c.direccion) || '-'}</small></td>
+            <td>$${Number(c.limite_credito).toFixed(2)}</td>
+            <td style="font-weight:bold; color:${deuda > 0 ? '#dc2626' : '#16a34a'};">$${deuda.toFixed(2)}</td>
+            <td><span style="background:${bloqueado ? '#fee2e2' : '#dcfce7'}; color:${bloqueado ? '#dc2626' : '#16a34a'}; padding:2px 8px; border-radius:10px; font-size:0.8rem; font-weight:bold;">${esc(c.estatus)}</span></td>
+            <td style="white-space:nowrap;">
+                <button onclick="abrirEditarCliente(${esc(c.id)},${esc(JSON.stringify(c.nombre))},${esc(JSON.stringify(c.direccion||''))},${esc(JSON.stringify(c.telefono||''))},${esc(c.limite_credito)})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px;">✏️ Editar</button>
+                <button onclick="toggleBloqueoCliente(${esc(c.id)},${esc(JSON.stringify(c.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:${bloqueado ? '#16a34a' : '#dc2626'};">${bloqueado ? '🔓 Desbloquear' : '🔒 Bloquear'}</button>
+                ${deuda > 0 ? `<button onclick="cobrarCliente(${esc(c.id)},${esc(JSON.stringify(c.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:#2563eb;">💰 Cobrar</button>` : ''}
+                <button onclick="verHistorial(${esc(c.id)},${esc(JSON.stringify(c.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:#64748b;">📋 Historial</button>
+                <button onclick="eliminarCliente(${esc(c.id)},${esc(JSON.stringify(c.nombre))})" title="Eliminar cliente" style="width:auto; padding:4px 8px; font-size:0.78rem; margin:2px; background:#991b1b;">🗑</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// #6 · Eliminar cliente
+async function eliminarCliente(id, nombre) {
+    if (!confirm(`¿Eliminar al cliente "${nombre}"?\n\n(Si tiene pedidos en el historial, el sistema no lo borrará para no descuadrar cuentas; en ese caso mejor bloquéalo.)`)) return;
+    try {
+        const res = await fetch(`${API}/clientes/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) cargarClientes();
+        else alert(data.mensaje || 'No se pudo eliminar');
+    } catch (e) { alert('Error de conexión'); }
 }
 
 function abrirEditarCliente(id, nombre, direccion, telefono, limite) {

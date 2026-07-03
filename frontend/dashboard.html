@@ -346,7 +346,7 @@
                     </div>
                     <div class="table-container">
                         <h3 style="margin-bottom:10px; color:var(--primary);">🎫 Tickets de compra</h3>
-                        <table><thead><tr><th>Fecha</th><th>Insumo</th><th>Proveedor</th><th>Cantidad</th><th>Costo unit.</th><th>Total</th></tr></thead><tbody id="tabla-tickets-compra"></tbody></table>
+                        <table><thead><tr><th>Fecha</th><th>Insumo</th><th>Proveedor</th><th>Cantidad</th><th>Costo unit.</th><th>Total</th><th>Acción</th></tr></thead><tbody id="tabla-tickets-compra"></tbody><tfoot id="tfoot-tickets-compra"></tfoot></table>
                     </div>
                 </div>
             </div>
@@ -406,6 +406,7 @@
                 <div id="mensaje-nuevo-cliente" class="mensaje"></div>
             </div>
             <div class="table-container">
+                <input type="text" id="clientes-buscar" placeholder="🔎 Buscar cliente por nombre o teléfono..." oninput="filtrarClientesTabla()" autocomplete="off" style="margin-bottom:12px; max-width:360px;">
                 <table><thead><tr><th>ID</th><th>Nombre</th><th>Dirección</th><th>Límite</th><th>Deuda</th><th>Estatus</th><th>Acciones</th></tr></thead><tbody id="tabla-clientes"></tbody></table>
             </div>
         </div>

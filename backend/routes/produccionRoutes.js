@@ -12,6 +12,7 @@ const {
     editarProducto,
     eliminarProducto,
     eliminarInsumo,
+    editarInsumo,
     obtenerBodegas,
     crearBodega,
     eliminarBodega
@@ -26,6 +27,7 @@ router.delete('/bodegas/:id', eliminarBodega);
 router.get('/insumos', obtenerInsumos);
 router.post('/insumos', crearInsumo);
 router.patch('/insumos/:id/bodega', actualizarBodegaInsumo);
+router.put('/insumos/:id', editarInsumo);
 router.delete('/insumos/:id', eliminarInsumo);
 
 // Almacén de producto terminado

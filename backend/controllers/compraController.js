@@ -84,4 +84,25 @@ const obtenerAnalisisCompras = async (req, res) => {
     }
 };
 
-module.exports = { registrarCompra, obtenerCompras, obtenerAnalisisCompras };
+// Eliminar un ticket de compra y revertir el stock que había sumado
+const eliminarCompra = async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query("START TRANSACTION");
+        const [c] = await db.query("SELECT insumo_id, cantidad FROM compras_insumo WHERE id = ?", [id]);
+        if (!c.length) { await db.query("ROLLBACK"); return res.status(404).json({ mensaje: 'Ticket de compra no encontrado' }); }
+        await db.query(
+            "UPDATE insumos SET stock_actual = GREATEST(0, stock_actual - ?) WHERE id = ?",
+            [c[0].cantidad, c[0].insumo_id]
+        );
+        await db.query("DELETE FROM compras_insumo WHERE id = ?", [id]);
+        await db.query("COMMIT");
+        res.json({ mensaje: 'Ticket de compra eliminado y stock revertido' });
+    } catch (error) {
+        await db.query("ROLLBACK");
+        console.error("Error al eliminar compra:", error);
+        res.status(500).json({ mensaje: "Error interno del servidor" });
+    }
+};
+
+module.exports = { registrarCompra, obtenerCompras, obtenerAnalisisCompras, eliminarCompra };

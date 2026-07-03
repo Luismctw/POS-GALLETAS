@@ -316,6 +316,8 @@
                 <label>Cliente</label>
                 <input type="text" id="cp-buscar" placeholder="🔎 Buscar cliente..." autocomplete="off" oninput="filtrarClientesMovil()">
                 <select id="cp-cliente" required></select>
+                <label>Asignar a</label>
+                <select id="cp-repartidor"></select>
                 <label>¿Qué llevas? (contenido)</label>
                 <input type="text" id="cp-contenido" placeholder="Ej. 5 cajas surtidas" required>
                 <label>Piezas (opcional)</label>
@@ -458,6 +460,7 @@
         const cont = document.getElementById('lista-pedidos');
         try {
             const pedidos = await (await fetch(`${API}/pedidos/ruta/${repartidor.id}/${hoy()}`)).json();
+            _rutaCache = pedidos;
 
             const pendientes = pedidos.filter(p => p.estatus === 'pendiente').length;
             const badge = document.getElementById('badge-pendientes');
@@ -525,6 +528,7 @@
                 <button class="btn-action btn-entregar" onclick="abrirModalCobro(${p.id}, ${p.total})">✓ Entregar</button>
                 <button class="btn-action btn-reagendar" onclick="reagendar(${p.id})">↺ Reagendar</button>
                 <button class="btn-action" style="background:#6366f1;" onclick="abrirReasignar(${p.id})">↦ Pasar</button>
+                <button class="btn-action" style="background:#0ea5e9;" onclick="editarPedidoMovil(${p.id})">✏️ Editar</button>
             </div>` : '';
 
         const reagTag = p.veces_reagendado > 0 && !entregado
@@ -586,6 +590,61 @@
         } catch { alert('Error de conexión'); }
     }
 
+    // ===== #7 EDITAR PEDIDO DESDE EL CEL =====
+    let _rutaCache = [];
+    async function editarPedidoMovil(id) {
+        const p = _rutaCache.find(x => String(x.id) === String(id));
+        if (!p) return;
+        const contenido = prompt('¿Qué llevas? (contenido)', p.contenido || '');
+        if (contenido === null) return;
+        const piezas = prompt('Piezas:', p.piezas ?? 0);
+        if (piezas === null) return;
+        const total = prompt('Total a cobrar ($):', p.total);
+        if (total === null) return;
+        try {
+            const res = await fetch(`${API}/pedidos/${id}/editar-movil`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contenido: contenido.trim(), piezas: parseInt(piezas) || 0, total: parseFloat(total) })
+            });
+            const data = await res.json();
+            if (res.ok) { cargarRuta(); cargarResumen(); }
+            else alert(data.mensaje || 'No se pudo editar');
+        } catch { alert('Error de conexión'); }
+    }
+
+    // ===== #6 EDITAR / BORRAR GASTOS =====
+    let _gastosCache = [];
+    async function editarGastoMovil(id) {
+        const g = _gastosCache.find(x => String(x.id) === String(id));
+        if (!g) return;
+        const monto = prompt('Monto del gasto ($):', g.monto);
+        if (monto === null) return;
+        let descripcion = g.descripcion || '';
+        if (g.categoria === 'otro') {
+            const d = prompt('¿Qué gasto fue?', descripcion);
+            if (d === null) return;
+            descripcion = d;
+        }
+        try {
+            const res = await fetch(`${API}/gastos/${id}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ categoria: g.categoria, monto: parseFloat(monto), descripcion })
+            });
+            const data = await res.json();
+            if (res.ok) { cargarGastosLista(); cargarResumen(); }
+            else alert(data.mensaje || 'No se pudo editar');
+        } catch { alert('Error de conexión'); }
+    }
+    async function eliminarGastoMovil(id) {
+        if (!confirm('¿Borrar este gasto?')) return;
+        try {
+            const res = await fetch(`${API}/gastos/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok) { cargarGastosLista(); cargarResumen(); }
+            else alert(data.mensaje || 'No se pudo borrar');
+        } catch { alert('Error de conexión'); }
+    }
+
     // ===== #9 CREAR PEDIDO / #3 REASIGNAR (datos de la app) =====
     let _datosMovil = { clientes: [], repartidores: [] };
 
@@ -594,6 +653,13 @@
             _datosMovil = await (await fetch(`${API}/pedidos/datos-movil`)).json();
         } catch { _datosMovil = { clientes: [], repartidores: [] }; }
         pintarClientesMovil(_datosMovil.clientes);
+        // #7 · Selector de "asignar a": todos los repartidores, yo por defecto
+        const selR = document.getElementById('cp-repartidor');
+        if (selR) {
+            selR.innerHTML = _datosMovil.repartidores.map(r =>
+                `<option value="${r.id}" ${repartidor && String(r.id) === String(repartidor.id) ? 'selected' : ''}>${r.nombre}${repartidor && String(r.id) === String(repartidor.id) ? ' (yo)' : ''}</option>`
+            ).join('');
+        }
     }
 
     function pintarClientesMovil(lista) {
@@ -616,7 +682,7 @@
         e.preventDefault();
         const msgEl = document.getElementById('cp-msg');
         const payload = {
-            repartidor_id: repartidor.id,
+            repartidor_id: document.getElementById('cp-repartidor').value || repartidor.id,
             cliente_id: document.getElementById('cp-cliente').value,
             contenido: document.getElementById('cp-contenido').value.trim(),
             piezas: parseInt(document.getElementById('cp-piezas').value) || 0,
@@ -677,6 +743,7 @@
                 wrap.innerHTML = '<div style="color:#94a3b8; font-size:0.9rem; text-align:center; padding:16px;">Sin gastos registrados hoy</div>';
                 return;
             }
+            _gastosCache = rows;
             wrap.innerHTML = rows.map(g => `
                 <div style="background:#fff; border-radius:10px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 4px rgba(0,0,0,0.07);">
                     <div>
@@ -684,7 +751,11 @@
                         <strong style="margin-left:8px; text-transform:capitalize;">${g.categoria}</strong>
                         ${g.descripcion ? `<div style="font-size:0.8rem; color:#64748b; margin-left:28px;">${g.descripcion}</div>` : ''}
                     </div>
-                    <div style="font-weight:800; color:#dc2626; font-size:1.05rem;">$${Number(g.monto).toFixed(2)}</div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div style="font-weight:800; color:#dc2626; font-size:1.05rem;">$${Number(g.monto).toFixed(2)}</div>
+                        <button onclick="editarGastoMovil(${g.id})" title="Editar" style="background:#f59e0b; color:#fff; border:none; border-radius:6px; padding:4px 8px; font-size:0.8rem;">✏️</button>
+                        <button onclick="eliminarGastoMovil(${g.id})" title="Borrar" style="background:#ef4444; color:#fff; border:none; border-radius:6px; padding:4px 8px; font-size:0.8rem;">🗑</button>
+                    </div>
                 </div>`).join('');
         } catch {
             wrap.innerHTML = '<div style="color:#94a3b8; font-size:0.9rem; text-align:center; padding:16px;">Error al cargar</div>';

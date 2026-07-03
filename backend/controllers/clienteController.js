@@ -104,4 +104,28 @@ const obtenerHistorialCobros = async (req, res) => {
     }
 };
 
-module.exports = { obtenerClientes, obtenerDeudas, registrarCobro, crearCliente, editarCliente, toggleBloqueo, obtenerHistorialCobros };
+// Eliminar cliente. Se bloquea si tiene pedidos (para no descuadrar cuentas);
+// en ese caso conviene bloquearlo en vez de borrarlo.
+const eliminarCliente = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [[{ np }]] = await db.query("SELECT COUNT(*) AS np FROM pedidos WHERE cliente_id = ?", [id]);
+        if (np > 0) {
+            return res.status(409).json({
+                mensaje: `No se puede eliminar: el cliente tiene ${np} pedido(s) en el historial. Para conservar las cuentas, mejor bloquéalo en lugar de borrarlo.`
+            });
+        }
+        await db.query('START TRANSACTION');
+        await db.query("DELETE FROM historial_cobros WHERE cliente_id = ?", [id]);
+        const [r] = await db.query("DELETE FROM clientes WHERE id = ?", [id]);
+        await db.query('COMMIT');
+        if (r.affectedRows === 0) return res.status(404).json({ mensaje: 'Cliente no encontrado' });
+        res.json({ mensaje: 'Cliente eliminado' });
+    } catch (e) {
+        await db.query('ROLLBACK');
+        console.error('Error al eliminar cliente:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+module.exports = { obtenerClientes, obtenerDeudas, registrarCobro, crearCliente, editarCliente, toggleBloqueo, obtenerHistorialCobros, eliminarCliente };
