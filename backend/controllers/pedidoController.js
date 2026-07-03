@@ -476,9 +476,79 @@ const eliminarPedido = async (req, res) => {
     }
 };
 
+// ===== APP MÓVIL (público) · datos para los selectores de la app =====
+const datosMovil = async (req, res) => {
+    try {
+        const [clientes] = await db.query(
+            "SELECT id, nombre, saldo_deudor, limite_credito, estatus FROM clientes ORDER BY nombre"
+        );
+        const [repartidores] = await db.query(
+            "SELECT id, nombre FROM repartidores WHERE estatus = 'activo' ORDER BY nombre"
+        );
+        res.json({ clientes, repartidores });
+    } catch (e) {
+        console.error('Error datos móvil:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+// ===== #9 · El repartidor crea un pedido desde su app (se lo asigna a sí mismo) =====
+const crearPedidoRepartidor = async (req, res) => {
+    const { repartidor_id, cliente_id, contenido, piezas, total } = req.body;
+    if (!repartidor_id || !cliente_id || !contenido || !total) {
+        return res.status(400).json({ mensaje: "Faltan datos del pedido (cliente, contenido y precio)" });
+    }
+    try {
+        const [clientes] = await db.query(
+            "SELECT limite_credito, saldo_deudor, estatus FROM clientes WHERE id = ?", [cliente_id]
+        );
+        if (clientes.length === 0) return res.status(404).json({ mensaje: 'Cliente no encontrado' });
+        const cliente = clientes[0];
+        if (cliente.estatus === 'bloqueado') return res.status(400).json({ mensaje: 'El cliente está bloqueado en el sistema.' });
+
+        const nuevoSaldo = parseFloat(cliente.saldo_deudor) + parseFloat(total);
+        if (nuevoSaldo > parseFloat(cliente.limite_credito)) {
+            const disponible = parseFloat(cliente.limite_credito) - parseFloat(cliente.saldo_deudor);
+            return res.status(400).json({ mensaje: `Límite de crédito excedido. Disponible: $${disponible.toFixed(2)}` });
+        }
+        await db.query(
+            `INSERT INTO pedidos (cliente_id, repartidor_id, contenido, piezas, total, estatus, fecha, fecha_creacion)
+             VALUES (?, ?, ?, ?, ?, 'pendiente', CURDATE(), CURDATE())`,
+            [cliente_id, repartidor_id, contenido, piezas || 0, total]
+        );
+        await db.query("UPDATE clientes SET saldo_deudor = ? WHERE id = ?", [nuevoSaldo, cliente_id]);
+        res.status(201).json({ mensaje: 'Pedido creado y asignado a ti.' });
+    } catch (e) {
+        console.error('Error al crear pedido (repartidor):', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+// ===== #3 · Reasignar un pedido a otro repartidor (desde la app) =====
+const reasignarPedido = async (req, res) => {
+    const { id } = req.params;
+    const { repartidor_id } = req.body;
+    if (!repartidor_id) return res.status(400).json({ mensaje: 'Selecciona un repartidor' });
+    try {
+        const [ped] = await db.query("SELECT estatus FROM pedidos WHERE id = ?", [id]);
+        if (!ped.length) return res.status(404).json({ mensaje: 'Pedido no encontrado' });
+        if (['entregado', 'cancelado'].includes(ped[0].estatus)) {
+            return res.status(400).json({ mensaje: 'Ese pedido ya no se puede reasignar.' });
+        }
+        await db.query("UPDATE pedidos SET repartidor_id = ?, estatus = 'pendiente' WHERE id = ?", [repartidor_id, id]);
+        res.json({ mensaje: 'Pedido reasignado' });
+    } catch (e) {
+        console.error('Error al reasignar:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
 module.exports = {
     crearPedido,
     asignarPedido,
+    datosMovil,
+    crearPedidoRepartidor,
+    reasignarPedido,
     obtenerPedidosCreados,
     obtenerPedidos,
     obtenerPedidosPrioritarios,

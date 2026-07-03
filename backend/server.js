@@ -43,6 +43,9 @@ app.get( '/api/pedidos/ruta/:repId/:fecha',    pedidoCtrl.obtenerRutaDelDia);
 app.get( '/api/pedidos/resumen/:repId/:fecha', pedidoCtrl.obtenerResumenRepartidor);
 app.patch('/api/pedidos/:id/entregar',         pedidoCtrl.entregarPedido);
 app.patch('/api/pedidos/:id/reagendar',        pedidoCtrl.reagendarPedido);
+app.get( '/api/pedidos/datos-movil',           pedidoCtrl.datosMovil);          // clientes + repartidores para la app
+app.post('/api/pedidos/repartidor',            pedidoCtrl.crearPedidoRepartidor); // #9 repartidor crea pedido
+app.patch('/api/pedidos/:id/reasignar',        pedidoCtrl.reasignarPedido);       // #3 reasignar entre repartidores
 app.post('/api/repartidores/auth',             require('./controllers/repartidorController').autenticarRepartidor);
 app.use('/api/gastos', require('./routes/gastoRoutes'));
 

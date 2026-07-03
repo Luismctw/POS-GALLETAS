@@ -309,6 +309,25 @@
         </div>
     </div>
 
+    <!-- Tab: Crear pedido (#9) -->
+    <div id="tab-crear" class="tab-body" style="display:none;">
+        <div class="gasto-form">
+            <form id="form-crear-pedido">
+                <label>Cliente</label>
+                <input type="text" id="cp-buscar" placeholder="🔎 Buscar cliente..." autocomplete="off" oninput="filtrarClientesMovil()">
+                <select id="cp-cliente" required></select>
+                <label>¿Qué llevas? (contenido)</label>
+                <input type="text" id="cp-contenido" placeholder="Ej. 5 cajas surtidas" required>
+                <label>Piezas (opcional)</label>
+                <input type="number" id="cp-piezas" min="0" placeholder="0" inputmode="numeric">
+                <label>Total a cobrar ($)</label>
+                <input type="number" id="cp-total" step="0.01" min="0.01" placeholder="0.00" required inputmode="decimal">
+                <button type="submit" class="btn-submit">Crear pedido</button>
+            </form>
+            <div id="cp-msg" class="gasto-msg"></div>
+        </div>
+    </div>
+
     <nav>
         <button class="nav-btn active" id="nav-ruta" onclick="switchTab('ruta', this)">
             <span class="nav-icon-wrap">
@@ -316,6 +335,10 @@
                 <span class="nav-badge" id="badge-pendientes" style="display:none;"></span>
             </span>
             Ruta
+        </button>
+        <button class="nav-btn" id="nav-crear" onclick="switchTab('crear', this)">
+            <span class="nav-icon">➕</span>
+            Pedido
         </button>
         <button class="nav-btn" id="nav-gastos" onclick="switchTab('gastos', this)">
             <span class="nav-icon">💸</span>
@@ -338,6 +361,20 @@
         <div class="modal-btns">
             <button class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
             <button class="btn-confirm" onclick="confirmarEntrega()">Confirmar entrega</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL REASIGNAR (#3) -->
+<div class="modal-overlay hidden" id="modal-reasignar">
+    <div class="modal">
+        <h3>↦ Pasar pedido a otro repartidor</h3>
+        <p class="modal-sub" id="reasig-sub">Pedido #—</p>
+        <label>Repartidor destino</label>
+        <select id="reasig-rep"></select>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="cerrarReasignar()">Cancelar</button>
+            <button class="btn-confirm" onclick="confirmarReasignar()">Reasignar</button>
         </div>
     </div>
 </div>
@@ -409,6 +446,7 @@
         document.getElementById('header-date').textContent = fechaBonita();
         cargarRuta();
         cargarResumen();
+        cargarDatosMovil();
         // Refresca la ruta cada 60 segundos automáticamente
         intervalRuta = setInterval(() => {
             if (document.getElementById('tab-ruta').style.display !== 'none') cargarRuta();
@@ -486,6 +524,7 @@
             <div class="card-actions">
                 <button class="btn-action btn-entregar" onclick="abrirModalCobro(${p.id}, ${p.total})">✓ Entregar</button>
                 <button class="btn-action btn-reagendar" onclick="reagendar(${p.id})">↺ Reagendar</button>
+                <button class="btn-action" style="background:#6366f1;" onclick="abrirReasignar(${p.id})">↦ Pasar</button>
             </div>` : '';
 
         const reagTag = p.veces_reagendado > 0 && !entregado
@@ -544,6 +583,85 @@
         try {
             await fetch(`${API}/pedidos/${id}/reagendar`, { method: 'PATCH' });
             cargarRuta(); cargarResumen();
+        } catch { alert('Error de conexión'); }
+    }
+
+    // ===== #9 CREAR PEDIDO / #3 REASIGNAR (datos de la app) =====
+    let _datosMovil = { clientes: [], repartidores: [] };
+
+    async function cargarDatosMovil() {
+        try {
+            _datosMovil = await (await fetch(`${API}/pedidos/datos-movil`)).json();
+        } catch { _datosMovil = { clientes: [], repartidores: [] }; }
+        pintarClientesMovil(_datosMovil.clientes);
+    }
+
+    function pintarClientesMovil(lista) {
+        const sel = document.getElementById('cp-cliente');
+        if (!sel) return;
+        const actual = sel.value;
+        sel.innerHTML = '<option value="">Selecciona un cliente...</option>' +
+            lista.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+        if (actual && lista.some(c => String(c.id) === actual)) sel.value = actual;
+    }
+
+    function filtrarClientesMovil() {
+        const q = (document.getElementById('cp-buscar').value || '').toLowerCase().trim();
+        const f = q ? _datosMovil.clientes.filter(c => String(c.nombre).toLowerCase().includes(q)) : _datosMovil.clientes;
+        pintarClientesMovil(f);
+        if (f.length === 1) document.getElementById('cp-cliente').value = f[0].id;
+    }
+
+    document.getElementById('form-crear-pedido').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msgEl = document.getElementById('cp-msg');
+        const payload = {
+            repartidor_id: repartidor.id,
+            cliente_id: document.getElementById('cp-cliente').value,
+            contenido: document.getElementById('cp-contenido').value.trim(),
+            piezas: parseInt(document.getElementById('cp-piezas').value) || 0,
+            total: parseFloat(document.getElementById('cp-total').value) || 0
+        };
+        if (!payload.cliente_id) { msgEl.className = 'gasto-msg err'; msgEl.style.display = 'block'; msgEl.textContent = 'Selecciona un cliente'; return; }
+        try {
+            const res = await fetch(`${API}/pedidos/repartidor`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            msgEl.className = `gasto-msg ${res.ok ? 'ok' : 'err'}`;
+            msgEl.style.display = 'block';
+            msgEl.textContent = data.mensaje;
+            if (res.ok) { e.target.reset(); pintarClientesMovil(_datosMovil.clientes); cargarRuta(); }
+        } catch { msgEl.className = 'gasto-msg err'; msgEl.style.display = 'block'; msgEl.textContent = 'Error de conexión'; }
+        setTimeout(() => msgEl.style.display = 'none', 4000);
+    });
+
+    let pedidoReasignar = null;
+    function abrirReasignar(id) {
+        pedidoReasignar = id;
+        document.getElementById('reasig-sub').textContent = `Pedido #${id}`;
+        const sel = document.getElementById('reasig-rep');
+        const otros = _datosMovil.repartidores.filter(r => String(r.id) !== String(repartidor.id));
+        sel.innerHTML = otros.length
+            ? otros.map(r => `<option value="${r.id}">${r.nombre}</option>`).join('')
+            : '<option value="">No hay otros repartidores</option>';
+        document.getElementById('modal-reasignar').classList.remove('hidden');
+    }
+    function cerrarReasignar() {
+        document.getElementById('modal-reasignar').classList.add('hidden');
+        pedidoReasignar = null;
+    }
+    async function confirmarReasignar() {
+        const repId = document.getElementById('reasig-rep').value;
+        if (!pedidoReasignar || !repId) { cerrarReasignar(); return; }
+        try {
+            const res = await fetch(`${API}/pedidos/${pedidoReasignar}/reasignar`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ repartidor_id: repId })
+            });
+            const data = await res.json();
+            if (res.ok) { cerrarReasignar(); cargarRuta(); cargarResumen(); }
+            else alert(data.mensaje);
         } catch { alert('Error de conexión'); }
     }
 
@@ -630,14 +748,14 @@
 
     // ===== NAVEGACIÓN =====
     function switchTab(tab, btn) {
-        ['ruta','gastos','resumen'].forEach(t => {
+        ['ruta','crear','gastos','resumen'].forEach(t => {
             document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
         });
         if (tab === 'gastos') cargarGastosLista();
         if (tab === 'resumen') cargarResumen();
+        if (tab === 'crear') cargarDatosMovil();
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        if (tab === 'resumen') cargarResumen();
     }
 
     document.getElementById('btn-logout').addEventListener('click', () => {
