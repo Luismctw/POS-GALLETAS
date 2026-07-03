@@ -85,13 +85,37 @@ function cambiarVista(vista) {
 }
 
 // ====================== CREAR PEDIDO ======================
+let _clientesCache = []; // lista completa para el buscador del selector de pedido
+
 async function cargarClientesSelect() {
     try {
-        const clientes = await (await fetch(`${API}/clientes`)).json();
-        const sel = document.getElementById('cliente_id');
-        sel.innerHTML = '<option value="">Selecciona un cliente...</option>';
-        clientes.forEach(c => sel.innerHTML += `<option value="${c.id}">${c.nombre}</option>`);
+        _clientesCache = await (await fetch(`${API}/clientes`)).json();
+        const buscar = document.getElementById('cliente_buscar');
+        if (buscar) buscar.value = '';
+        pintarClientesSelect(_clientesCache);
     } catch (e) { console.error(e); }
+}
+
+// Rellena el <select> de clientes con la lista dada (respeta la selección actual)
+function pintarClientesSelect(lista) {
+    const sel = document.getElementById('cliente_id');
+    if (!sel) return;
+    const seleccionado = sel.value;
+    sel.innerHTML = '<option value="">Selecciona un cliente...</option>' +
+        lista.map(c => `<option value="${esc(c.id)}">${esc(c.nombre)}</option>`).join('');
+    if (seleccionado && lista.some(c => String(c.id) === seleccionado)) sel.value = seleccionado;
+}
+
+// Filtra el selector de clientes según lo que se escribe en el buscador
+function filtrarClientesSelect() {
+    const q = (document.getElementById('cliente_buscar').value || '').toLowerCase().trim();
+    const filtrados = q
+        ? _clientesCache.filter(c => String(c.nombre).toLowerCase().includes(q))
+        : _clientesCache;
+    pintarClientesSelect(filtrados);
+    // Si solo queda uno, lo selecciona automáticamente
+    const sel = document.getElementById('cliente_id');
+    if (filtrados.length === 1) sel.value = filtrados[0].id;
 }
 
 // ---- PICKER DE PRODUCTOS EN BODEGA para Crear Pedido ----
@@ -267,10 +291,45 @@ async function asignarPedido(id) {
     } catch (e) { msg(el, false, 'Error de conexión'); }
 }
 
+let _pedidosMonitorCache = []; // #5 · para editar pedidos desde el monitor
+
+// #5 · Editar un pedido no entregado (contenido, piezas, total)
+async function editarPedidoMonitor(id) {
+    const p = _pedidosMonitorCache.find(x => String(x.id) === String(id));
+    if (!p) return;
+    const contenido = prompt('Contenido del pedido:', p.contenido || '');
+    if (contenido === null) return;
+    const piezas = prompt('Piezas:', p.piezas ?? 0);
+    if (piezas === null) return;
+    const total = prompt('Total ($):', p.total);
+    if (total === null) return;
+    try {
+        const res = await fetch(`${API}/pedidos/${id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contenido: contenido.trim(), piezas: parseInt(piezas) || 0, total: parseFloat(total) })
+        });
+        const data = await res.json();
+        if (res.ok) cargarPedidosMonitor();
+        else alert(data.mensaje || 'No se pudo editar');
+    } catch (e) { alert('Error de conexión'); }
+}
+
+// #5 · Eliminar un pedido no entregado
+async function eliminarPedidoMonitor(id, cliente) {
+    if (!confirm(`¿Eliminar el pedido #${id} de "${cliente}"?\n\nSe revertirá el cargo en la cuenta del cliente.`)) return;
+    try {
+        const res = await fetch(`${API}/pedidos/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) cargarPedidosMonitor();
+        else alert(data.mensaje || 'No se pudo eliminar');
+    } catch (e) { alert('Error de conexión'); }
+}
+
 async function cargarPedidosMonitor() {
     const tbody = document.getElementById('tabla-pedidos-monitor');
     try {
         const pedidos = await (await fetch(`${API}/pedidos`)).json();
+        _pedidosMonitorCache = pedidos;
         tbody.innerHTML = '';
         pedidos.forEach(p => {
             const color = p.estatus === 'entregado' ? 'green' : (p.estatus === 'reagendado' ? 'orange' : (p.estatus === 'creado' ? 'gray' : (p.estatus === 'cancelado' ? '#dc2626' : 'blue')));
@@ -279,14 +338,20 @@ async function cargarPedidosMonitor() {
                 : (p.estatus === 'entregado'
                     ? `<button onclick="corregirCobro(${p.id}, ${p.monto_cobrado ?? p.total})" style="padding:4px 8px; background:#f59e0b; color:#fff; font-size:11px; width:auto;">✏️ Corregir cobro</button>`
                     : '-');
-            const cancelBtn = !['entregado','cancelado'].includes(p.estatus)
-                ? `<button onclick="cancelarPedido(${p.id})" style="padding:4px 8px; background:#dc2626; font-size:11px; width:auto;">✕ Cancelar</button>` : '-';
+            const editable = !['entregado','cancelado'].includes(p.estatus);
+            const editBtn = editable
+                ? `<button onclick="editarPedidoMonitor(${p.id})" style="padding:4px 8px; background:#0ea5e9; color:#fff; font-size:11px; width:auto;">✏️ Editar</button>` : '';
+            const cancelBtn = editable
+                ? `<button onclick="cancelarPedido(${p.id})" style="padding:4px 8px; background:#dc2626; font-size:11px; width:auto;">✕ Cancelar</button>` : '';
+            const delBtn = p.estatus !== 'entregado'
+                ? `<button onclick="eliminarPedidoMonitor(${p.id}, ${esc(JSON.stringify(p.cliente))})" title="Eliminar pedido" style="padding:4px 8px; background:#991b1b; color:#fff; font-size:11px; width:auto;">🗑</button>` : '';
+            const gestion = [cancelBtn, editBtn, delBtn].filter(Boolean).join(' ') || '-';
             const antig = p.dias_antiguedad > 0 ? `${p.dias_antiguedad} días${p.veces_reagendado ? ' · ' + p.veces_reagendado + 'x' : ''}` : 'Hoy';
             tbody.innerHTML += `<tr style="${p.estatus === 'cancelado' ? 'opacity:0.55;' : ''}">
-                <td>#${p.id}</td><td><strong>${p.cliente}</strong></td><td>${p.repartidor}</td>
-                <td>${p.contenido || '-'}</td><td>$${p.total}</td>
-                <td style="color:${color}; font-weight:bold; text-transform:uppercase;">${p.estatus}</td>
-                <td>${antig}</td><td>${accion}</td><td>${cancelBtn}</td></tr>`;
+                <td>#${p.id}</td><td><strong>${esc(p.cliente)}</strong></td><td>${esc(p.repartidor)}</td>
+                <td>${esc(p.contenido) || '-'}</td><td>$${esc(p.total)}</td>
+                <td style="color:${color}; font-weight:bold; text-transform:uppercase;">${esc(p.estatus)}</td>
+                <td>${antig}</td><td>${accion}</td><td style="white-space:nowrap;">${gestion}</td></tr>`;
         });
     } catch (e) { tbody.innerHTML = '<tr><td colspan="9">Error al cargar el monitor</td></tr>'; }
 }
@@ -460,6 +525,7 @@ async function cargarInsumos() {
                 <td style="white-space:nowrap;">
                     <select id="bodega-sel-${i.id}" style="font-size:0.8rem; padding:3px 6px; border-radius:6px; border:1px solid #cbd5e1;">${opsBodega}</select>
                     <button onclick="cambiarBodegaInsumo(${i.id})" style="margin-left:4px; padding:3px 8px; font-size:0.78rem; background:#3b82f6; color:#fff; border:none; border-radius:6px; cursor:pointer;">Mandar</button>
+                    <button onclick="eliminarInsumo(${esc(i.id)}, ${esc(JSON.stringify(i.nombre))})" title="Eliminar materia prima" style="margin-left:4px; padding:3px 8px; font-size:0.78rem; background:#ef4444; color:#fff; border:none; border-radius:6px; cursor:pointer;">🗑</button>
                 </td></tr>`;
         });
         const badge = document.getElementById('stock-bajo-badge');
@@ -468,6 +534,17 @@ async function cargarInsumos() {
             document.getElementById('stock-bajo-count').textContent = contadorBajo;
         }
     } catch (e) { tbody.innerHTML = '<tr><td colspan="6">Error al cargar</td></tr>'; }
+}
+
+// #10 · Eliminar materia prima (bloqueada por el backend si está en una receta)
+async function eliminarInsumo(id, nombre) {
+    if (!confirm(`¿Eliminar la materia prima "${nombre}"?\n\nSolo se puede si no está en ninguna receta.`)) return;
+    try {
+        const res = await fetch(`${API}/produccion/insumos/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) { cargarInsumos(); }
+        else alert(data.mensaje || 'No se pudo eliminar');
+    } catch (e) { alert('Error de conexión'); }
 }
 
 document.getElementById('form-insumo').addEventListener('submit', async (e) => {
@@ -488,19 +565,62 @@ document.getElementById('form-insumo').addEventListener('submit', async (e) => {
 });
 
 // ====================== PRODUCTO TERMINADO ======================
+let _productosCache = []; // para editar productos de terceros
+
+// #2 · Editar un producto de tercero (nombre, precio, stock, bodega)
+async function editarProductoTercero(id) {
+    const p = _productosCache.find(x => String(x.id) === String(id));
+    if (!p) return;
+    const nombre = prompt('Nombre del producto:', p.nombre);
+    if (nombre === null) return;
+    const precio = prompt('Precio por caja ($):', p.precio_caja);
+    if (precio === null) return;
+    const stock = prompt('Stock actual (cajas):', p.stock_actual);
+    if (stock === null) return;
+    const bodega = prompt('Bodega (1, 2 ó 3):', p.bodega_asignada);
+    if (bodega === null) return;
+    try {
+        const res = await fetch(`${API}/produccion/productos/${id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nombre: nombre.trim(), precio_caja: parseFloat(precio), stock_actual: parseInt(stock), bodega_asignada: bodega.trim() })
+        });
+        const data = await res.json();
+        if (res.ok) cargarProductoTerminado();
+        else alert(data.mensaje || 'No se pudo editar');
+    } catch (e) { alert('Error de conexión'); }
+}
+
+// #2 · Eliminar un producto
+async function eliminarProducto(id, nombre) {
+    if (!confirm(`¿Eliminar el producto "${nombre}"?`)) return;
+    try {
+        const res = await fetch(`${API}/produccion/productos/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) cargarProductoTerminado();
+        else alert(data.mensaje || 'No se pudo eliminar');
+    } catch (e) { alert('Error de conexión'); }
+}
+
 async function cargarProductoTerminado() {
     const cont = document.getElementById('bodegas-container');
     try {
         const productos = await (await fetch(`${API}/produccion/productos`)).json();
         cont.innerHTML = '';
+        _productosCache = productos;
         [1, 2, 3].forEach(b => {
             const items = productos.filter(p => Number(p.bodega_asignada) === b);
             const filas = items.length
-                ? items.map(p => `<tr><td><strong>${p.nombre}</strong><br><small style="color:${p.tipo === 'propio' ? '#8b5cf6' : '#0ea5e9'};">${p.tipo}</small></td><td>$${p.precio_caja}</td><td><strong>${p.stock_actual}</strong> cajas</td></tr>`).join('')
-                : '<tr><td colspan="3" style="color:#94a3b8;">Sin productos</td></tr>';
+                ? items.map(p => {
+                    const acciones = p.tipo === 'tercero'
+                        ? `<button onclick="editarProductoTercero(${esc(p.id)})" title="Editar" style="padding:3px 8px; font-size:0.78rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;">✏️</button>
+                           <button onclick="eliminarProducto(${esc(p.id)}, ${esc(JSON.stringify(p.nombre))})" title="Eliminar" style="margin-left:4px; padding:3px 8px; font-size:0.78rem; background:#ef4444; color:#fff; border:none; border-radius:6px; cursor:pointer;">🗑</button>`
+                        : '<small style="color:#94a3b8;">—</small>';
+                    return `<tr><td><strong>${esc(p.nombre)}</strong><br><small style="color:${p.tipo === 'propio' ? '#8b5cf6' : '#0ea5e9'};">${esc(p.tipo)}</small></td><td>$${esc(p.precio_caja)}</td><td><strong>${esc(p.stock_actual)}</strong> cajas</td><td style="white-space:nowrap;">${acciones}</td></tr>`;
+                }).join('')
+                : '<tr><td colspan="4" style="color:#94a3b8;">Sin productos</td></tr>';
             cont.innerHTML += `<div class="table-container">
                 <h3 style="margin-bottom:10px; color:var(--primary);">🏬 Bodega ${b}</h3>
-                <table><thead><tr><th>Producto</th><th>Precio</th><th>Stock</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+                <table><thead><tr><th>Producto</th><th>Precio</th><th>Stock</th><th>Acciones</th></tr></thead><tbody>${filas}</tbody></table></div>`;
         });
 
         // Llenar el select de productos de terceros

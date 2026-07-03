@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS `gastos` (
   `repartidor_id` int DEFAULT NULL,
   `fecha` date NOT NULL,
   `categoria` enum('gasolina','comida','caseta','otro') NOT NULL,
+  `descripcion` varchar(255) DEFAULT NULL,
   `monto` decimal(10,2) NOT NULL,
   `foto_ticket` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),

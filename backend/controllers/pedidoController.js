@@ -170,7 +170,7 @@ const obtenerResumenRepartidor = async (req, res) => {
     const { repId, fecha } = req.params;
     try {
         const [pedidos] = await db.query(
-            "SELECT COUNT(id) AS total_entregados, IFNULL(SUM(total), 0) AS total_cobrado FROM pedidos WHERE repartidor_id = ? AND fecha = ? AND estatus = 'entregado'",
+            "SELECT COUNT(id) AS total_entregados, IFNULL(SUM(monto_cobrado), 0) AS total_cobrado FROM pedidos WHERE repartidor_id = ? AND fecha = ? AND estatus = 'entregado'",
             [repId, fecha]
         );
         const [gastos] = await db.query(
@@ -418,6 +418,64 @@ const cancelarPedido = async (req, res) => {
     }
 };
 
+// Editar un pedido NO entregado (contenido, piezas, total, fecha).
+// Ajusta el saldo del cliente por la diferencia de total.
+const editarPedido = async (req, res) => {
+    const { id } = req.params;
+    const { contenido, piezas, total, fecha } = req.body;
+    try {
+        await db.query('START TRANSACTION');
+        const [rows] = await db.query("SELECT cliente_id, total, contenido, estatus FROM pedidos WHERE id = ?", [id]);
+        if (!rows.length) { await db.query('ROLLBACK'); return res.status(404).json({ mensaje: 'Pedido no encontrado' }); }
+        const ped = rows[0];
+        if (ped.estatus === 'entregado') { await db.query('ROLLBACK'); return res.status(400).json({ mensaje: 'Un pedido entregado no se edita aquí. Usa "Corregir cobro".' }); }
+        if (ped.estatus === 'cancelado') { await db.query('ROLLBACK'); return res.status(400).json({ mensaje: 'No se puede editar un pedido cancelado.' }); }
+
+        const nuevoTotal = total !== undefined && total !== '' ? parseFloat(total) : parseFloat(ped.total);
+        const diff = nuevoTotal - parseFloat(ped.total);
+        if (diff !== 0) {
+            await db.query("UPDATE clientes SET saldo_deudor = GREATEST(0, saldo_deudor + ?) WHERE id = ?", [diff, ped.cliente_id]);
+        }
+        await db.query(
+            "UPDATE pedidos SET contenido = ?, piezas = ?, total = ?, fecha = COALESCE(?, fecha) WHERE id = ?",
+            [contenido != null ? contenido : ped.contenido, piezas || 0, nuevoTotal, fecha || null, id]
+        );
+        await db.query('COMMIT');
+        res.json({ mensaje: 'Pedido actualizado' });
+    } catch (e) {
+        await db.query('ROLLBACK');
+        console.error('Error al editar pedido:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+// Eliminar un pedido (no entregado). Revierte el cargo al cliente si aplica.
+const eliminarPedido = async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('START TRANSACTION');
+        const [rows] = await db.query("SELECT cliente_id, total, estatus FROM pedidos WHERE id = ?", [id]);
+        if (!rows.length) { await db.query('ROLLBACK'); return res.status(404).json({ mensaje: 'Pedido no encontrado' }); }
+        const ped = rows[0];
+        if (ped.estatus === 'entregado') {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ mensaje: 'No se puede eliminar un pedido entregado (afectaría las cuentas ya cobradas).' });
+        }
+        if (ped.estatus !== 'cancelado') {
+            await db.query("UPDATE clientes SET saldo_deudor = GREATEST(0, saldo_deudor - ?) WHERE id = ?", [ped.total, ped.cliente_id]);
+        }
+        // Soltar referencias de reagendado para no romper la clave foránea
+        await db.query("UPDATE pedidos SET reagendado_de = NULL WHERE reagendado_de = ?", [id]);
+        await db.query("DELETE FROM pedidos WHERE id = ?", [id]);
+        await db.query('COMMIT');
+        res.json({ mensaje: 'Pedido eliminado' });
+    } catch (e) {
+        await db.query('ROLLBACK');
+        console.error('Error al eliminar pedido:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
 module.exports = {
     crearPedido,
     asignarPedido,
@@ -433,5 +491,7 @@ module.exports = {
     registrarRetorno,
     cancelarPedido,
     corregirCobro,
-    obtenerContenidos
+    obtenerContenidos,
+    editarPedido,
+    eliminarPedido
 };

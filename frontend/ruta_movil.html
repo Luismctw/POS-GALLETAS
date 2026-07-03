@@ -255,13 +255,17 @@
         <div class="gasto-form">
             <form id="form-gastos">
                 <label>Categoría</label>
-                <select id="gasto-categoria" required>
+                <select id="gasto-categoria" required onchange="toggleDescripcionGasto()">
                     <option value="" disabled selected>Selecciona...</option>
                     <option value="gasolina">⛽ Gasolina</option>
                     <option value="comida">🍔 Comida</option>
                     <option value="caseta">🛣️ Caseta</option>
                     <option value="otro">📌 Otro</option>
                 </select>
+                <div id="gasto-desc-wrap" style="display:none;">
+                    <label>¿Qué gasto fue?</label>
+                    <input type="text" id="gasto-descripcion" placeholder="Ej. estacionamiento, refacción..." maxlength="120">
+                </div>
                 <label>Monto ($)</label>
                 <input type="number" id="gasto-monto" step="0.01" min="0.01" placeholder="0.00" required inputmode="decimal">
                 <label>Foto del ticket (opcional)</label>
@@ -560,6 +564,7 @@
                     <div>
                         <span style="font-size:1.1rem;">${iconoGasto[g.categoria] || '📌'}</span>
                         <strong style="margin-left:8px; text-transform:capitalize;">${g.categoria}</strong>
+                        ${g.descripcion ? `<div style="font-size:0.8rem; color:#64748b; margin-left:28px;">${g.descripcion}</div>` : ''}
                     </div>
                     <div style="font-weight:800; color:#dc2626; font-size:1.05rem;">$${Number(g.monto).toFixed(2)}</div>
                 </div>`).join('');
@@ -576,6 +581,8 @@
         fd.append('fecha', hoy());
         fd.append('categoria', document.getElementById('gasto-categoria').value);
         fd.append('monto', document.getElementById('gasto-monto').value);
+        const descripcion = document.getElementById('gasto-descripcion').value.trim();
+        if (descripcion) fd.append('descripcion', descripcion);
         const foto = document.getElementById('gasto-foto').files[0];
         if (foto) fd.append('foto', foto);
         try {
@@ -584,10 +591,20 @@
             msgEl.className = `gasto-msg ${res.ok ? 'ok' : 'err'}`;
             msgEl.style.display = 'block';
             msgEl.textContent = data.mensaje;
-            if (res.ok) { e.target.reset(); cargarResumen(); cargarGastosLista(); }
+            if (res.ok) { e.target.reset(); toggleDescripcionGasto(); cargarResumen(); cargarGastosLista(); }
         } catch { msgEl.className = 'gasto-msg err'; msgEl.style.display = 'block'; msgEl.textContent = 'Error de conexión'; }
         setTimeout(() => msgEl.style.display = 'none', 4000);
     });
+
+    // #12 · Muestra el campo "¿qué gasto fue?" solo cuando la categoría es "otro"
+    function toggleDescripcionGasto() {
+        const cat = document.getElementById('gasto-categoria').value;
+        const wrap = document.getElementById('gasto-desc-wrap');
+        const input = document.getElementById('gasto-descripcion');
+        const mostrar = cat === 'otro';
+        wrap.style.display = mostrar ? 'block' : 'none';
+        if (!mostrar) input.value = '';
+    }
 
     // ===== RESUMEN =====
     async function cargarResumen() {

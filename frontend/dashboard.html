@@ -113,7 +113,10 @@
                 <div class="card" style="flex:1; min-width:320px;">
                     <h3>Nuevo Pedido</h3>
                     <form id="form-pedido">
-                        <div class="form-group"><label>Cliente:</label><select id="cliente_id" required><option value="">Cargando...</option></select></div>
+                        <div class="form-group"><label>Cliente:</label>
+                            <input type="text" id="cliente_buscar" placeholder="🔎 Escribe para buscar cliente..." oninput="filtrarClientesSelect()" autocomplete="off" style="margin-bottom:6px;">
+                            <select id="cliente_id" required><option value="">Cargando...</option></select>
+                        </div>
                         <!-- Picker de productos en bodega -->
                         <div style="background:#f1f5f9; border-radius:10px; padding:14px; margin-bottom:12px;">
                             <label style="font-size:0.85rem; font-weight:600; color:#475569; display:block; margin-bottom:8px;">📦 Agregar productos de bodega:</label>

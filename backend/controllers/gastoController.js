@@ -2,7 +2,7 @@ const db = require('../config/db');
 
 // Registrar un nuevo gasto de repartidor (con foto opcional del ticket)
 const registrarGasto = async (req, res) => {
-    const { repartidor_id, fecha, categoria, monto } = req.body;
+    const { repartidor_id, fecha, categoria, monto, descripcion } = req.body;
     const foto_ticket = req.file ? req.file.filename : null;
 
     if (!repartidor_id || !monto) {
@@ -11,9 +11,9 @@ const registrarGasto = async (req, res) => {
 
     try {
         await db.query(
-            `INSERT INTO gastos (repartidor_id, fecha, categoria, monto, foto_ticket)
-             VALUES (?, ?, ?, ?, ?)`,
-            [repartidor_id, fecha || new Date().toISOString().split('T')[0], categoria, monto, foto_ticket]
+            `INSERT INTO gastos (repartidor_id, fecha, categoria, monto, foto_ticket, descripcion)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [repartidor_id, fecha || new Date().toISOString().split('T')[0], categoria, monto, foto_ticket, descripcion || null]
         );
         res.json({ mensaje: 'Gasto registrado correctamente' });
     } catch (error) {
@@ -28,7 +28,7 @@ const obtenerGastosRepartidor = async (req, res) => {
     if (!repartidor_id) return res.status(400).json({ mensaje: 'Falta repartidor_id' });
     try {
         const [rows] = await db.query(
-            `SELECT id, categoria, monto, foto_ticket,
+            `SELECT id, categoria, monto, foto_ticket, descripcion,
                     DATE_FORMAT(fecha, '%Y-%m-%d') AS fecha
              FROM gastos WHERE repartidor_id = ? AND fecha = ?
              ORDER BY id DESC`,

@@ -221,6 +221,75 @@ const registrarEntradaTerceros = async (req, res) => {
     }
 };
 
+// Editar un producto (nombre, precio, bodega, y stock para terceros)
+const editarProducto = async (req, res) => {
+    const { id } = req.params;
+    const { nombre, precio_caja, bodega_asignada, stock_actual } = req.body;
+    if (!nombre || precio_caja === undefined) {
+        return res.status(400).json({ mensaje: "Nombre y precio son obligatorios" });
+    }
+    try {
+        const [prod] = await db.query("SELECT tipo FROM productos WHERE id = ?", [id]);
+        if (prod.length === 0) return res.status(404).json({ mensaje: "Producto no encontrado" });
+
+        // El stock solo se puede editar directamente en productos de tercero.
+        // En productos propios el stock lo maneja la producción por receta.
+        if (prod[0].tipo === 'tercero' && stock_actual !== undefined) {
+            await db.query(
+                "UPDATE productos SET nombre = ?, precio_caja = ?, bodega_asignada = ?, stock_actual = ? WHERE id = ?",
+                [nombre, precio_caja, bodega_asignada || 'Bodega Central', stock_actual, id]
+            );
+        } else {
+            await db.query(
+                "UPDATE productos SET nombre = ?, precio_caja = ?, bodega_asignada = ? WHERE id = ?",
+                [nombre, precio_caja, bodega_asignada || 'Bodega Central', id]
+            );
+        }
+        res.json({ mensaje: "Producto actualizado" });
+    } catch (error) {
+        console.error("Error al editar producto:", error);
+        res.status(500).json({ mensaje: "Error interno del servidor" });
+    }
+};
+
+// Eliminar un producto (y su receta si la tiene)
+const eliminarProducto = async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query("START TRANSACTION");
+        await db.query("DELETE FROM producto_insumo WHERE producto_id = ?", [id]);
+        const [result] = await db.query("DELETE FROM productos WHERE id = ?", [id]);
+        await db.query("COMMIT");
+        if (result.affectedRows === 0) return res.status(404).json({ mensaje: "Producto no encontrado" });
+        res.json({ mensaje: "Producto eliminado" });
+    } catch (error) {
+        await db.query("ROLLBACK");
+        console.error("Error al eliminar producto:", error);
+        res.status(500).json({ mensaje: "Error interno del servidor" });
+    }
+};
+
+// Eliminar una materia prima (insumo). Se bloquea si está en uso en alguna receta.
+const eliminarInsumo = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [usos] = await db.query(
+            `SELECT COUNT(*) AS n FROM producto_insumo WHERE insumo_id = ?`, [id]
+        );
+        if (usos[0].n > 0) {
+            return res.status(409).json({
+                mensaje: `No se puede eliminar: esta materia prima se usa en ${usos[0].n} receta(s). Quítala de las recetas primero.`
+            });
+        }
+        const [result] = await db.query("DELETE FROM insumos WHERE id = ?", [id]);
+        if (result.affectedRows === 0) return res.status(404).json({ mensaje: "Materia prima no encontrada" });
+        res.json({ mensaje: "Materia prima eliminada" });
+    } catch (error) {
+        console.error("Error al eliminar insumo:", error);
+        res.status(500).json({ mensaje: "Error interno del servidor" });
+    }
+};
+
 module.exports = {
     obtenerInsumos,
     crearInsumo,
@@ -229,5 +298,8 @@ module.exports = {
     crearProductoConReceta,
     producirPorReceta,
     registrarEntradaTerceros,
-    actualizarBodegaInsumo
+    actualizarBodegaInsumo,
+    editarProducto,
+    eliminarProducto,
+    eliminarInsumo
 };

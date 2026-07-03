@@ -15,7 +15,9 @@ const {
     registrarRetorno,
     cancelarPedido,
     corregirCobro,
-    obtenerContenidos
+    obtenerContenidos,
+    editarPedido,
+    eliminarPedido
 } = require('../controllers/pedidoController');
 
 // Lectura (panel admin)
@@ -38,5 +40,7 @@ router.patch('/:id/entregar', entregarPedido);
 router.patch('/:id/reagendar', reagendarPedido);
 router.patch('/:id/cancelar', cancelarPedido);
 router.patch('/:id/corregir-cobro', corregirCobro);
+router.put('/:id', editarPedido);
+router.delete('/:id', eliminarPedido);
 
 module.exports = router;
