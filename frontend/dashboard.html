@@ -213,13 +213,7 @@
                             <div class="form-group" style="flex:1;"><label>Stock mínimo (alerta):</label><input type="number" id="insumo_minimo" step="0.01" placeholder="Ej. 5"></div>
                         </div>
                         <div class="form-group"><label>Bodega destino:</label>
-                            <select id="insumo_ubicacion">
-                                <option value="Bodega Materia Prima">Bodega Materia Prima</option>
-                                <option value="Bodega 1">Bodega 1</option>
-                                <option value="Bodega 2">Bodega 2</option>
-                                <option value="Bodega 3">Bodega 3</option>
-                                <option value="Bodega de Tránsito">Bodega de Tránsito</option>
-                            </select>
+                            <select id="insumo_ubicacion"></select>
                         </div>
                         <button type="submit" class="btn-success">Guardar Materia Prima</button>
                     </form>
@@ -232,6 +226,17 @@
                         <tbody id="tabla-insumos"></tbody>
                     </table>
                 </div>
+            </div>
+            <!-- Administrar bodegas -->
+            <div class="card" style="border-left:4px solid #6366f1; margin-top:20px;">
+                <h3 style="color:#6366f1;">🏬 Bodegas</h3>
+                <p style="font-size:0.85rem; color:#64748b; margin-bottom:10px;">Agrega o quita bodegas. Aparecen en los selectores de materia prima y de productos.</p>
+                <form id="form-bodega" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+                    <div class="form-group" style="flex:2; min-width:200px; margin:0;"><label>Nombre de la bodega:</label><input type="text" id="bodega_nombre" placeholder="Ej. Bodega 4" required></div>
+                    <button type="submit" style="background:#6366f1; width:auto; padding:10px 20px;">+ Agregar bodega</button>
+                </form>
+                <div id="mensaje-bodega" class="mensaje" style="margin-top:10px;"></div>
+                <div id="lista-bodegas" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;"></div>
             </div>
         </div>
 
@@ -279,11 +284,7 @@
                                 </select>
                             </div>
                             <div class="form-group" style="flex:1;"><label>Bodega:</label>
-                                <select id="nuevo_prod_bodega">
-                                    <option value="1">Bodega 1</option>
-                                    <option value="2">Bodega 2</option>
-                                    <option value="3">Bodega 3</option>
-                                </select>
+                                <select id="nuevo_prod_bodega"></select>
                             </div>
                         </div>
                         <div id="bloque-receta" style="background:#f1f5f9; padding:15px; border-radius:8px; margin-bottom:15px;">

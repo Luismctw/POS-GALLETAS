@@ -70,9 +70,9 @@ function cambiarVista(vista) {
         crear: () => { cargarClientesSelect(); cargarCreadosResumen(); cargarContenidosSugeridos(); cargarSelectorBodega(); },
         asignar: () => { cargarPedidosPorAsignar(); cargarPedidosMonitor(); },
         prioridad: cargarPrioridad,
-        materia: cargarInsumos,
-        terminado: cargarProductoTerminado,
-        produccion: () => { cargarInsumosReceta(); cargarRecetasProducir(); },
+        materia: async () => { await cargarBodegas(); cargarInsumos(); },
+        terminado: async () => { await cargarBodegas(); cargarProductoTerminado(); },
+        produccion: async () => { await cargarBodegas(); cargarInsumosReceta(); cargarRecetasProducir(); },
         compras: () => { cargarInsumosCompra(); cargarTicketsCompra(); cargarAnalisisCompras(); },
         contabilidad: () => { cargarBalance('dia'); cargarDeudas(); cargarContabProduccion(); cargarTicketsBalance('dia'); },
         clientes: cargarClientes,
@@ -133,7 +133,7 @@ async function cargarSelectorBodega() {
             sel.innerHTML = '<option value="">Selecciona producto...</option>' +
                 disponibles.map(p =>
                     `<option value="${p.id}" data-precio="${esc(p.precio_caja)}" data-stock="${esc(p.stock_actual)}" data-nombre="${esc(p.nombre)}">
-                        ${esc(p.nombre)} — Bodega ${esc(p.bodega_asignada)} (${esc(p.stock_actual)} cajas)
+                        ${esc(p.nombre)} — ${esc(p.bodega_asignada)} (${esc(p.stock_actual)} cajas)
                     </option>`
                 ).join('');
         }
@@ -498,6 +498,71 @@ async function cargarPrioridad() {
 }
 
 // ====================== MATERIA PRIMA ======================
+// ====================== BODEGAS (dinámicas) ======================
+let _bodegasCache = [];
+const _BODEGAS_FALLBACK = ['Bodega Materia Prima', 'Bodega 1', 'Bodega 2', 'Bodega 3', 'Bodega de Tránsito'];
+
+// Nombres de bodega disponibles (cache o respaldo por si aún no cargó)
+function nombresBodegas() {
+    return _bodegasCache.length ? _bodegasCache.map(b => b.nombre) : _BODEGAS_FALLBACK;
+}
+
+async function cargarBodegas() {
+    try {
+        _bodegasCache = await (await fetch(`${API}/produccion/bodegas`)).json();
+    } catch (e) { _bodegasCache = []; }
+    poblarSelectBodegas('insumo_ubicacion');
+    poblarSelectBodegas('nuevo_prod_bodega');
+    renderListaBodegas();
+}
+
+// Llena un <select> con las bodegas (por nombre). Respeta la selección previa.
+function poblarSelectBodegas(selectId, seleccionado) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const actual = seleccionado ?? sel.value;
+    sel.innerHTML = nombresBodegas().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    if (actual && nombresBodegas().includes(actual)) sel.value = actual;
+}
+
+// Chips de bodegas con botón de eliminar (panel de administración)
+function renderListaBodegas() {
+    const cont = document.getElementById('lista-bodegas');
+    if (!cont) return;
+    cont.innerHTML = _bodegasCache.map(b => `
+        <span style="display:inline-flex; align-items:center; gap:6px; background:#eef2ff; color:#4338ca; padding:6px 10px; border-radius:20px; font-size:0.85rem;">
+            🏬 ${esc(b.nombre)}
+            <button onclick="eliminarBodega(${esc(b.id)}, ${esc(JSON.stringify(b.nombre))})" title="Eliminar bodega" style="background:none; border:none; color:#ef4444; cursor:pointer; font-weight:bold; font-size:1rem; line-height:1;">×</button>
+        </span>`).join('') || '<span style="color:#94a3b8; font-size:0.85rem;">Sin bodegas</span>';
+}
+
+async function eliminarBodega(id, nombre) {
+    if (!confirm(`¿Eliminar la bodega "${nombre}"?\n\nSolo se puede si no tiene materia prima ni productos.`)) return;
+    try {
+        const res = await fetch(`${API}/produccion/bodegas/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) cargarBodegas();
+        else alert(data.mensaje || 'No se pudo eliminar');
+    } catch (e) { alert('Error de conexión'); }
+}
+
+const _formBodega = document.getElementById('form-bodega');
+if (_formBodega) _formBodega.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nombre = document.getElementById('bodega_nombre').value.trim();
+    const el = document.getElementById('mensaje-bodega');
+    if (!nombre) return;
+    try {
+        const res = await fetch(`${API}/produccion/bodegas`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nombre })
+        });
+        const data = await res.json();
+        msg(el, res.ok, data.mensaje);
+        if (res.ok) { e.target.reset(); cargarBodegas(); }
+    } catch (err) { msg(el, false, 'Error de conexión'); }
+});
+
 async function cargarInsumos() {
     const tbody = document.getElementById('tabla-insumos');
     try {
@@ -513,9 +578,8 @@ async function cargarInsumos() {
                 ? '<span style="background:#fee2e2; color:#dc2626; padding:4px 10px; border-radius:10px; font-weight:bold;">⚠️ STOCK BAJO</span>'
                 : '<span style="background:#dcfce7; color:#166534; padding:4px 10px; border-radius:10px; font-weight:bold;">OK</span>';
             const fmt = n => Number.isInteger(n) ? n : parseFloat(n.toFixed(2));
-            const bodegas = ['Bodega Materia Prima','Bodega 1','Bodega 2','Bodega 3','Bodega de Tránsito'];
-            const opsBodega = bodegas.map(b =>
-                `<option value="${b}" ${b === (i.ubicacion || 'Bodega Materia Prima') ? 'selected' : ''}>${b}</option>`
+            const opsBodega = nombresBodegas().map(b =>
+                `<option value="${esc(b)}" ${b === (i.ubicacion || 'Bodega Materia Prima') ? 'selected' : ''}>${esc(b)}</option>`
             ).join('');
             tbody.innerHTML += `<tr style="${bajo ? 'background:#fff5f5;' : ''}">
                 <td>${i.id}</td><td><strong>${i.nombre}</strong></td>
@@ -577,7 +641,7 @@ async function editarProductoTercero(id) {
     if (precio === null) return;
     const stock = prompt('Stock actual (cajas):', p.stock_actual);
     if (stock === null) return;
-    const bodega = prompt('Bodega (1, 2 ó 3):', p.bodega_asignada);
+    const bodega = prompt('Bodega (nombre, ej. "Bodega 1"):', p.bodega_asignada);
     if (bodega === null) return;
     try {
         const res = await fetch(`${API}/produccion/productos/${id}`, {
@@ -607,8 +671,10 @@ async function cargarProductoTerminado() {
         const productos = await (await fetch(`${API}/produccion/productos`)).json();
         cont.innerHTML = '';
         _productosCache = productos;
-        [1, 2, 3].forEach(b => {
-            const items = productos.filter(p => Number(p.bodega_asignada) === b);
+        // Muestra todas las bodegas activas + cualquier bodega que ya tenga productos
+        const bodegaNombres = [...new Set([...nombresBodegas(), ...productos.map(p => String(p.bodega_asignada))])];
+        bodegaNombres.forEach(bname => {
+            const items = productos.filter(p => String(p.bodega_asignada) === bname);
             const filas = items.length
                 ? items.map(p => {
                     const acciones = p.tipo === 'tercero'
@@ -619,7 +685,7 @@ async function cargarProductoTerminado() {
                 }).join('')
                 : '<tr><td colspan="4" style="color:#94a3b8;">Sin productos</td></tr>';
             cont.innerHTML += `<div class="table-container">
-                <h3 style="margin-bottom:10px; color:var(--primary);">🏬 Bodega ${b}</h3>
+                <h3 style="margin-bottom:10px; color:var(--primary);">🏬 ${esc(bname)}</h3>
                 <table><thead><tr><th>Producto</th><th>Precio</th><th>Stock</th><th>Acciones</th></tr></thead><tbody>${filas}</tbody></table></div>`;
         });
 
@@ -628,7 +694,7 @@ async function cargarProductoTerminado() {
         const sel = document.getElementById('tercero_producto_id');
         if (sel) {
             sel.innerHTML = terceros.length
-                ? '<option value="">Selecciona producto...</option>' + terceros.map(p => `<option value="${p.id}">${p.nombre} (Bodega ${p.bodega_asignada})</option>`).join('')
+                ? '<option value="">Selecciona producto...</option>' + terceros.map(p => `<option value="${esc(p.id)}">${esc(p.nombre)} (${esc(p.bodega_asignada)})</option>`).join('')
                 : '<option value="">Sin productos de terceros registrados</option>';
         }
     } catch (e) { cont.innerHTML = '<p>Error al cargar el almacén</p>'; }
@@ -698,7 +764,7 @@ document.getElementById('form-nuevo-producto').addEventListener('submit', async 
         nombre: document.getElementById('nuevo_prod_nombre').value,
         precio_caja: document.getElementById('nuevo_prod_precio').value,
         tipo,
-        bodega_asignada: parseInt(document.getElementById('nuevo_prod_bodega').value),
+        bodega_asignada: document.getElementById('nuevo_prod_bodega').value,
         receta: tipo === 'propio' ? recetaTemporal : [],
         stock_inicial: document.getElementById('nuevo_prod_stock').value || 0
     };

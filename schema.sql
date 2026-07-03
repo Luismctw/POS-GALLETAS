@@ -41,6 +41,17 @@ CREATE TABLE IF NOT EXISTS `productos` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS `bodegas` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) NOT NULL,
+  `activa` tinyint DEFAULT '1',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_bodega_nombre` (`nombre`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO `bodegas` (`nombre`) VALUES
+  ('Bodega Materia Prima'), ('Bodega 1'), ('Bodega 2'), ('Bodega 3'), ('Bodega de Tránsito');
+
 CREATE TABLE IF NOT EXISTS `producto_insumo` (
   `producto_id` int DEFAULT NULL,
   `insumo_id` int DEFAULT NULL,

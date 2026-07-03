@@ -51,6 +51,57 @@ const actualizarBodegaInsumo = async (req, res) => {
 };
 
 // =====================================================================
+//  BODEGAS (dinámicas)
+// =====================================================================
+const obtenerBodegas = async (req, res) => {
+    try {
+        const [bodegas] = await db.query("SELECT id, nombre FROM bodegas WHERE activa = 1 ORDER BY id");
+        res.json(bodegas);
+    } catch (error) {
+        console.error("Error al obtener bodegas:", error);
+        res.status(500).json({ mensaje: "Error interno del servidor" });
+    }
+};
+
+const crearBodega = async (req, res) => {
+    const nombre = (req.body.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ mensaje: "El nombre de la bodega es obligatorio" });
+    try {
+        // Si existía pero estaba desactivada, reactivarla
+        const [existe] = await db.query("SELECT id, activa FROM bodegas WHERE nombre = ?", [nombre]);
+        if (existe.length) {
+            if (existe[0].activa) return res.status(409).json({ mensaje: "Ya existe una bodega con ese nombre" });
+            await db.query("UPDATE bodegas SET activa = 1 WHERE id = ?", [existe[0].id]);
+            return res.status(201).json({ mensaje: "Bodega reactivada" });
+        }
+        await db.query("INSERT INTO bodegas (nombre) VALUES (?)", [nombre]);
+        res.status(201).json({ mensaje: "Bodega agregada" });
+    } catch (error) {
+        console.error("Error al crear bodega:", error);
+        res.status(500).json({ mensaje: "Error interno del servidor" });
+    }
+};
+
+const eliminarBodega = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [bod] = await db.query("SELECT nombre FROM bodegas WHERE id = ?", [id]);
+        if (!bod.length) return res.status(404).json({ mensaje: "Bodega no encontrada" });
+        const nombre = bod[0].nombre;
+        const [[{ ci }]] = await db.query("SELECT COUNT(*) AS ci FROM insumos WHERE ubicacion = ?", [nombre]);
+        const [[{ cp }]] = await db.query("SELECT COUNT(*) AS cp FROM productos WHERE bodega_asignada = ?", [nombre]);
+        if (ci > 0 || cp > 0) {
+            return res.status(409).json({ mensaje: `No se puede eliminar: la bodega tiene ${ci} materia(s) prima(s) y ${cp} producto(s). Muévelos primero.` });
+        }
+        await db.query("UPDATE bodegas SET activa = 0 WHERE id = ?", [id]);
+        res.json({ mensaje: "Bodega eliminada" });
+    } catch (error) {
+        console.error("Error al eliminar bodega:", error);
+        res.status(500).json({ mensaje: "Error interno del servidor" });
+    }
+};
+
+// =====================================================================
 //  ALMACÉN DE PRODUCTO TERMINADO (productos)
 // =====================================================================
 
@@ -301,5 +352,8 @@ module.exports = {
     actualizarBodegaInsumo,
     editarProducto,
     eliminarProducto,
-    eliminarInsumo
+    eliminarInsumo,
+    obtenerBodegas,
+    crearBodega,
+    eliminarBodega
 };

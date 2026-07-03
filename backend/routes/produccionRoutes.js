@@ -11,8 +11,16 @@ const {
     actualizarBodegaInsumo,
     editarProducto,
     eliminarProducto,
-    eliminarInsumo
+    eliminarInsumo,
+    obtenerBodegas,
+    crearBodega,
+    eliminarBodega
 } = require('../controllers/produccionController');
+
+// Bodegas dinámicas
+router.get('/bodegas', obtenerBodegas);
+router.post('/bodegas', crearBodega);
+router.delete('/bodegas/:id', eliminarBodega);
 
 // Almacén de materia prima
 router.get('/insumos', obtenerInsumos);
