@@ -105,6 +105,9 @@ const obtenerBalanceProduccion = async (req, res) => {
              GROUP BY pr.producto_id
              ORDER BY costo DESC`
         );
+        const cajas = Number(resumen[0].cajas_producidas) || 0;
+        const costo = Number(resumen[0].costo_total) || 0;
+        resumen[0].costo_promedio_caja = cajas > 0 ? (costo / cajas).toFixed(2) : '0.00';
         res.json({ periodo, resumen: resumen[0], porProducto });
     } catch (error) {
         console.error("Error en contabilidad de producción:", error);

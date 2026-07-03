@@ -188,12 +188,25 @@ const crearProductoConReceta = async (req, res) => {
 //  - suma las cajas al stock de producto terminado
 // =====================================================================
 const producirPorReceta = async (req, res) => {
-    const { producto_id, cantidad } = req.body;
+    const { producto_id, cantidad, receta_override } = req.body;
     const cajas = parseInt(cantidad);
 
     if (!producto_id || !cajas || cajas <= 0) {
         return res.status(400).json({ mensaje: "Selecciona un producto e indica cuántas cajas vas a producir" });
     }
+
+    // Ajustes de receta SOLO para este lote (producir con menos/más materia prima ese día).
+    // No modifica la receta guardada. Mapa insumo_id -> cantidad por caja.
+    const overrideMap = {};
+    if (Array.isArray(receta_override)) {
+        for (const o of receta_override) {
+            const c = parseFloat(o.cantidad_necesaria);
+            if (o.insumo_id != null && !isNaN(c) && c >= 0) overrideMap[o.insumo_id] = c;
+        }
+    }
+    const porCajaDe = (ing) => overrideMap[ing.insumo_id] !== undefined
+        ? overrideMap[ing.insumo_id]
+        : parseFloat(ing.cantidad_necesaria);
 
     try {
         await db.query("START TRANSACTION");
@@ -214,7 +227,7 @@ const producirPorReceta = async (req, res) => {
         // 1. Verificar que haya suficiente materia prima para todo el lote
         let costo_total = 0;
         for (const ing of receta) {
-            const requerido = parseFloat(ing.cantidad_necesaria) * cajas;
+            const requerido = porCajaDe(ing) * cajas;
             if (parseFloat(ing.stock_actual) < requerido) {
                 await db.query("ROLLBACK");
                 return res.status(400).json({
@@ -226,7 +239,7 @@ const producirPorReceta = async (req, res) => {
 
         // 2. Descontar la materia prima
         for (const ing of receta) {
-            const requerido = parseFloat(ing.cantidad_necesaria) * cajas;
+            const requerido = porCajaDe(ing) * cajas;
             await db.query("UPDATE insumos SET stock_actual = stock_actual - ? WHERE id = ?", [requerido, ing.insumo_id]);
         }
 

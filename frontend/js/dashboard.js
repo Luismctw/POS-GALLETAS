@@ -787,7 +787,12 @@ async function cargarRecetasProducir() {
 }
 
 document.getElementById('producir_producto').addEventListener('change', actualizarPreviewReceta);
-document.getElementById('producir_cantidad').addEventListener('input', actualizarPreviewReceta);
+document.getElementById('producir_cantidad').addEventListener('input', () => {
+    if (document.querySelector('#preview-receta input[data-insumo]')) recalcularTotalesReceta();
+    else actualizarPreviewReceta();
+});
+
+// #8 · Receta editable: muestra un input por ingrediente (cantidad por caja de ESTE lote)
 function actualizarPreviewReceta() {
     const id = parseInt(document.getElementById('producir_producto').value);
     const cant = parseInt(document.getElementById('producir_cantidad').value) || 0;
@@ -795,20 +800,45 @@ function actualizarPreviewReceta() {
     const prod = recetasCache.find(p => p.id === id);
     if (!prod || !cant) { prev.style.display = 'none'; return; }
     prev.style.display = 'block';
-    prev.innerHTML = '<strong>Materia prima a descontar:</strong><br>' +
-        prod.receta.map(r => {
-            const req = parseFloat((r.cantidad_necesaria * cant).toFixed(2));
-            const falta = parseFloat(r.stock_actual) < req;
-            return `${req} ${r.unidad_medida} de ${r.nombre} ${falta ? '<span style="color:#dc2626;">(¡falta! hay ' + parseFloat(r.stock_actual) + ')</span>' : ''}`;
-        }).join('<br>');
+    prev.innerHTML = `<strong>Materia prima a descontar</strong> <small style="color:#64748b;">— puedes ajustar la cantidad por caja solo para este lote (no cambia la receta guardada)</small>
+        <table style="width:100%; margin-top:8px; font-size:0.85rem;"><thead><tr>
+            <th style="text-align:left;">Materia prima</th><th>Por caja</th><th>Total (${cant} cajas)</th></tr></thead><tbody>` +
+        prod.receta.map(r => `<tr>
+            <td>${esc(r.nombre)} <small style="color:#94a3b8;">(${esc(r.unidad_medida)})</small></td>
+            <td style="text-align:center;"><input type="number" step="0.0001" min="0" value="${esc(r.cantidad_necesaria)}" data-insumo="${esc(r.insumo_id)}" oninput="recalcularTotalesReceta()" style="width:80px; padding:3px; text-align:right;"></td>
+            <td style="text-align:center;" id="tot-ing-${esc(r.insumo_id)}"></td>
+        </tr>`).join('') + '</tbody></table>';
+    recalcularTotalesReceta();
+}
+
+// Recalcula los totales por ingrediente según la cantidad y los valores editados
+function recalcularTotalesReceta() {
+    const cant = parseInt(document.getElementById('producir_cantidad').value) || 0;
+    const id = parseInt(document.getElementById('producir_producto').value);
+    const prod = recetasCache.find(p => p.id === id);
+    if (!prod) return;
+    document.querySelectorAll('#preview-receta input[data-insumo]').forEach(inp => {
+        const insumoId = inp.dataset.insumo;
+        const porCaja = parseFloat(inp.value) || 0;
+        const req = parseFloat((porCaja * cant).toFixed(4));
+        const ing = prod.receta.find(r => String(r.insumo_id) === String(insumoId));
+        const falta = ing && parseFloat(ing.stock_actual) < req;
+        const cell = document.getElementById(`tot-ing-${insumoId}`);
+        if (cell) cell.innerHTML = `${req} ${falta ? '<span style="color:#dc2626;">(¡falta! hay ' + parseFloat(ing.stock_actual) + ')</span>' : ''}`;
+    });
 }
 
 document.getElementById('form-producir').addEventListener('submit', async (e) => {
     e.preventDefault();
     const el = document.getElementById('mensaje-producir');
+    const overrides = [...document.querySelectorAll('#preview-receta input[data-insumo]')].map(inp => ({
+        insumo_id: parseInt(inp.dataset.insumo),
+        cantidad_necesaria: parseFloat(inp.value) || 0
+    }));
     const payload = {
         producto_id: document.getElementById('producir_producto').value,
-        cantidad: document.getElementById('producir_cantidad').value
+        cantidad: document.getElementById('producir_cantidad').value,
+        receta_override: overrides
     };
     try {
         const res = await fetch(`${API}/produccion/producir`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -921,13 +951,38 @@ async function abonar(id, deuda) {
 
 async function cargarContabProduccion() {
     const tbody = document.getElementById('tabla-prod-contab');
+    const prom = document.getElementById('prom-produccion');
+    // #7 · Costo promedio de producción por día, semana y mes
     try {
-        const d = await (await fetch(`${API}/balance/produccion?periodo=mes`)).json();
+        const periodos = [
+            { key: 'dia', label: 'Hoy', color: '#0ea5e9' },
+            { key: 'semana', label: 'Esta semana', color: '#8b5cf6' },
+            { key: 'mes', label: 'Este mes', color: '#16a34a' }
+        ];
+        const datos = await Promise.all(periodos.map(p =>
+            fetch(`${API}/balance/produccion?periodo=${p.key}`).then(r => r.json())
+        ));
+        if (prom) {
+            prom.innerHTML = periodos.map((p, i) => {
+                const r = datos[i].resumen;
+                return `<div style="background:#f8fafc; border-radius:10px; padding:10px; text-align:center; border-top:3px solid ${p.color};">
+                    <div style="font-size:0.75rem; color:#64748b; text-transform:uppercase; letter-spacing:0.03em;">${p.label}</div>
+                    <div style="font-size:1.15rem; font-weight:800; color:${p.color};">$${Number(r.costo_promedio_caja).toFixed(2)}</div>
+                    <div style="font-size:0.72rem; color:#94a3b8;">prom./caja</div>
+                    <div style="font-size:0.78rem; color:#475569; margin-top:4px;">${r.cajas_producidas} cajas · $${Number(r.costo_total).toFixed(2)}</div>
+                </div>`;
+            }).join('');
+        }
+        // Detalle del mes por producto
+        const d = datos[2];
         document.getElementById('resumen-produccion').innerHTML =
             `Lotes: <strong>${d.resumen.lotes}</strong> · Cajas: <strong>${d.resumen.cajas_producidas}</strong> · Costo total: <strong>$${Number(d.resumen.costo_total).toFixed(2)}</strong>`;
         tbody.innerHTML = d.porProducto.length ? '' : '<tr><td colspan="3">Sin producción este mes.</td></tr>';
-        d.porProducto.forEach(p => tbody.innerHTML += `<tr><td><strong>${p.producto}</strong></td><td>${p.cajas}</td><td>$${Number(p.costo).toFixed(2)}</td></tr>`);
-    } catch (e) { tbody.innerHTML = '<tr><td colspan="3">Error al cargar</td></tr>'; }
+        d.porProducto.forEach(p => tbody.innerHTML += `<tr><td><strong>${esc(p.producto)}</strong></td><td>${esc(p.cajas)}</td><td>$${Number(p.costo).toFixed(2)}</td></tr>`);
+    } catch (e) {
+        if (prom) prom.innerHTML = '';
+        tbody.innerHTML = '<tr><td colspan="3">Error al cargar</td></tr>';
+    }
 }
 
 // ====================== CLIENTES ======================

@@ -377,8 +377,10 @@
                     <table><thead><tr><th>Cliente</th><th>Teléfono</th><th>Deuda</th><th>Abonar</th></tr></thead><tbody id="tabla-deudas"></tbody></table>
                 </div>
                 <div class="table-container" style="flex:1; min-width:340px;">
-                    <h3 style="margin-bottom:10px; color:#8b5cf6;">🏭 Contabilidad de producción (mes)</h3>
-                    <div id="resumen-produccion" style="margin-bottom:15px; color:#475569;"></div>
+                    <h3 style="margin-bottom:10px; color:#8b5cf6;">🏭 Contabilidad de producción</h3>
+                    <div id="prom-produccion" style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px;"></div>
+                    <div style="font-weight:600; color:#475569; margin-bottom:6px;">Detalle del mes por producto</div>
+                    <div id="resumen-produccion" style="margin-bottom:10px; color:#475569; font-size:0.9rem;"></div>
                     <table><thead><tr><th>Producto</th><th>Cajas</th><th>Costo</th></tr></thead><tbody id="tabla-prod-contab"></tbody></table>
                 </div>
             </div>
