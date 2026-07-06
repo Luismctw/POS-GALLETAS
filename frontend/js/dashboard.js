@@ -240,7 +240,8 @@ document.getElementById('form-pedido').addEventListener('submit', async (e) => {
         cliente_id: document.getElementById('cliente_id').value,
         contenido: document.getElementById('contenido').value,
         piezas: document.getElementById('piezas').value || 0,
-        total: document.getElementById('total').value
+        total: document.getElementById('total').value,
+        fecha: document.getElementById('pedido_fecha').value || null
     };
     const el = document.getElementById('mensaje-pedido');
     try {
@@ -690,6 +691,21 @@ async function editarProductoTercero(id) {
     } catch (e) { alert('Error de conexión'); }
 }
 
+// #3 · Traspasar un producto a otra bodega
+async function cambiarBodegaProducto(id) {
+    const sel = document.getElementById(`prodbod-${id}`);
+    if (!sel) return;
+    try {
+        const res = await fetch(`${API}/produccion/productos/${id}/bodega`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bodega_asignada: sel.value })
+        });
+        const data = await res.json();
+        if (res.ok) cargarProductoTerminado();
+        else alert(data.mensaje || 'No se pudo trasladar');
+    } catch (e) { alert('Error de conexión'); }
+}
+
 // #2 · Eliminar un producto
 async function eliminarProducto(id, nombre) {
     if (!confirm(`¿Eliminar el producto "${nombre}"?`)) return;
@@ -713,11 +729,15 @@ async function cargarProductoTerminado() {
             const items = productos.filter(p => String(p.bodega_asignada) === bname);
             const filas = items.length
                 ? items.map(p => {
-                    const acciones = p.tipo !== 'propio'
+                    const editDel = p.tipo !== 'propio'
                         ? `<button onclick="editarProductoTercero(${esc(p.id)})" title="Editar" style="padding:3px 8px; font-size:0.78rem; background:#f59e0b; color:#fff; border:none; border-radius:6px; cursor:pointer;">✏️</button>
                            <button onclick="eliminarProducto(${esc(p.id)}, ${esc(JSON.stringify(p.nombre))})" title="Eliminar" style="margin-left:4px; padding:3px 8px; font-size:0.78rem; background:#ef4444; color:#fff; border:none; border-radius:6px; cursor:pointer;">🗑</button>`
-                        : '<small style="color:#94a3b8;">—</small>';
-                    return `<tr><td><strong>${esc(p.nombre)}</strong><br><small style="color:${p.tipo === 'propio' ? '#8b5cf6' : '#0ea5e9'};">${esc(p.tipo)}</small></td><td>$${esc(p.precio_caja)}</td><td><strong>${esc(p.stock_actual)}</strong> cajas</td><td style="white-space:nowrap;">${acciones}</td></tr>`;
+                        : '';
+                    // #3 · Traspasar producto a otra bodega
+                    const opsBod = nombresBodegas().map(b => `<option value="${esc(b)}" ${b === p.bodega_asignada ? 'selected' : ''}>${esc(b)}</option>`).join('');
+                    const mover = `<select id="prodbod-${esc(p.id)}" style="font-size:0.75rem; padding:2px 4px; border-radius:5px; border:1px solid #cbd5e1;">${opsBod}</select>
+                        <button onclick="cambiarBodegaProducto(${esc(p.id)})" title="Traspasar a otra bodega" style="margin-left:3px; padding:3px 7px; font-size:0.75rem; background:#3b82f6; color:#fff; border:none; border-radius:5px; cursor:pointer;">Mandar</button>`;
+                    return `<tr><td><strong>${esc(p.nombre)}</strong><br><small style="color:${p.tipo === 'propio' ? '#8b5cf6' : (p.tipo === 'combinada' ? '#db2777' : '#0ea5e9')};">${esc(p.tipo)}</small></td><td>$${esc(p.precio_caja)}</td><td><strong>${esc(p.stock_actual)}</strong> cajas</td><td style="white-space:nowrap;">${mover} ${editDel}</td></tr>`;
                 }).join('')
                 : '<tr><td colspan="4" style="color:#94a3b8;">Sin productos</td></tr>';
             cont.innerHTML += `<div class="table-container">
@@ -791,10 +811,31 @@ function dibujarReceta() {
 }
 function quitarIng(i) { recetaTemporal.splice(i, 1); dibujarReceta(); }
 
+let _editandoRecetaId = null; // #5 · id de la receta que se está editando
+
 document.getElementById('form-nuevo-producto').addEventListener('submit', async (e) => {
     e.preventDefault();
     const el = document.getElementById('mensaje-nuevo-producto');
     const tipo = document.getElementById('nuevo_prod_tipo').value;
+
+    // Modo EDICIÓN de receta (solo productos propios)
+    if (_editandoRecetaId) {
+        if (recetaTemporal.length === 0) return msg(el, false, 'La receta necesita al menos un ingrediente.');
+        const payload = {
+            nombre: document.getElementById('nuevo_prod_nombre').value,
+            precio_caja: document.getElementById('nuevo_prod_precio').value,
+            bodega_asignada: document.getElementById('nuevo_prod_bodega').value,
+            receta: recetaTemporal
+        };
+        try {
+            const res = await fetch(`${API}/produccion/recetas/${_editandoRecetaId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            msg(el, res.ok, data.mensaje);
+            if (res.ok) { cancelarEdicionReceta(); cargarRecetasProducir(); }
+        } catch (err) { msg(el, false, 'Error de conexión'); }
+        return;
+    }
+
     if (tipo === 'propio' && recetaTemporal.length === 0) return msg(el, false, 'Un producto propio necesita al menos un ingrediente.');
     const payload = {
         nombre: document.getElementById('nuevo_prod_nombre').value,
@@ -812,6 +853,60 @@ document.getElementById('form-nuevo-producto').addEventListener('submit', async 
     } catch (err) { msg(el, false, 'Error de conexión'); }
 });
 
+// #5 · Lista de recetas guardadas con editar/eliminar
+function renderListaRecetas() {
+    const cont = document.getElementById('lista-recetas');
+    if (!cont) return;
+    if (!recetasCache.length) { cont.innerHTML = '<small style="color:#94a3b8;">Aún no hay recetas.</small>'; return; }
+    cont.innerHTML = recetasCache.map(p => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#faf5ff; border:1px solid #e9d5ff; border-radius:8px; padding:8px 12px;">
+            <div><strong>${esc(p.nombre)}</strong> <small style="color:#94a3b8;">— $${esc(p.precio_caja)} · ${p.receta ? p.receta.length : 0} ingrediente(s)</small></div>
+            <div style="white-space:nowrap;">
+                <button onclick="editarRecetaCargar(${esc(p.id)})" style="width:auto; padding:4px 8px; font-size:0.78rem; background:#f59e0b;">✏️</button>
+                <button onclick="eliminarReceta(${esc(p.id)}, ${esc(JSON.stringify(p.nombre))})" style="width:auto; padding:4px 8px; font-size:0.78rem; background:#ef4444; margin-left:4px;">🗑</button>
+            </div>
+        </div>`).join('');
+}
+
+// #5 · Cargar una receta en el formulario para editarla
+function editarRecetaCargar(id) {
+    const p = recetasCache.find(x => String(x.id) === String(id));
+    if (!p) return;
+    _editandoRecetaId = id;
+    document.getElementById('nuevo_prod_nombre').value = p.nombre;
+    document.getElementById('nuevo_prod_precio').value = p.precio_caja;
+    document.getElementById('nuevo_prod_tipo').value = 'propio';
+    document.getElementById('nuevo_prod_tipo').dispatchEvent(new Event('change'));
+    document.getElementById('nuevo_prod_tipo').disabled = true;
+    recetaTemporal = (p.receta || []).map(r => ({ insumo_id: r.insumo_id, nombre: r.nombre, cantidad_necesaria: parseFloat(r.cantidad_necesaria) }));
+    dibujarReceta();
+    document.getElementById('btn-guardar-producto').textContent = 'Guardar cambios de receta';
+    document.getElementById('btn-cancelar-edicion-receta').style.display = 'block';
+    document.getElementById('nuevo_prod_nombre').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelarEdicionReceta() {
+    _editandoRecetaId = null;
+    document.getElementById('form-nuevo-producto').reset();
+    document.getElementById('nuevo_prod_tipo').disabled = false;
+    document.getElementById('nuevo_prod_tipo').dispatchEvent(new Event('change'));
+    recetaTemporal = [];
+    dibujarReceta();
+    document.getElementById('btn-guardar-producto').textContent = 'Guardar Producto';
+    document.getElementById('btn-cancelar-edicion-receta').style.display = 'none';
+}
+
+// #5 · Eliminar una receta (borra el producto propio y su receta)
+async function eliminarReceta(id, nombre) {
+    if (!confirm(`¿Eliminar la receta "${nombre}"?`)) return;
+    try {
+        const res = await fetch(`${API}/produccion/productos/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) { if (String(_editandoRecetaId) === String(id)) cancelarEdicionReceta(); cargarRecetasProducir(); }
+        else alert(data.mensaje || 'No se pudo eliminar');
+    } catch (e) { alert('Error de conexión'); }
+}
+
 let recetasCache = [];
 async function cargarRecetasProducir() {
     try {
@@ -820,6 +915,7 @@ async function cargarRecetasProducir() {
         sel.innerHTML = '<option value="">Selecciona una receta...</option>';
         recetasCache.forEach(p => sel.innerHTML += `<option value="${p.id}">${esc(p.nombre)} (stock: ${esc(p.stock_actual)})</option>`);
         renderComboSabores();
+        renderListaRecetas();
     } catch (e) { console.error(e); }
 }
 
@@ -1371,7 +1467,10 @@ async function cargarControlCarga() {
                         </button>
                     </td>
                 </tr>
-                ${r.notas_retorno ? `<tr><td colspan="8" style="color:#64748b; font-size:0.85rem; padding:4px 12px;">📝 Nota: ${r.notas_retorno}</td></tr>` : ''}`;
+                ${(r.detalle && r.detalle.length) ? `<tr><td colspan="8" style="padding:6px 12px; background:#fff;">
+                    <div style="font-size:0.82rem; color:#475569;"><strong>📦 Salió con:</strong> ${r.detalle.map(dd => `${esc(dd.contenido) || 'Sin detalle'} <span style="color:#94a3b8;">(${dd.piezas} pzas${dd.estatus === 'entregado' ? ' · entregado' : ''})</span>`).join(' &nbsp;·&nbsp; ')}</div>
+                </td></tr>` : ''}
+                ${r.notas_retorno ? `<tr><td colspan="8" style="color:#64748b; font-size:0.85rem; padding:4px 12px;">📝 Nota: ${esc(r.notas_retorno)}</td></tr>` : ''}`;
 
             return `
             <div class="table-container" style="border-left:4px solid ${bordeColor}; margin-bottom:16px;">

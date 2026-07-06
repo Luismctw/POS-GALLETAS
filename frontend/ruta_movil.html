@@ -316,14 +316,31 @@
                 <label>Cliente</label>
                 <input type="text" id="cp-buscar" placeholder="🔎 Buscar cliente..." autocomplete="off" oninput="filtrarClientesMovil()">
                 <select id="cp-cliente" required></select>
+                <button type="button" onclick="toggleNuevoClienteMovil()" style="background:#0ea5e9; color:#fff; border:none; border-radius:8px; padding:8px; margin-top:6px; width:100%; font-size:0.9rem;">+ Nuevo cliente</button>
+                <div id="cp-nuevo-cliente" style="display:none; background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:10px; margin-top:8px;">
+                    <input type="text" id="cp-nc-nombre" placeholder="Nombre del cliente" style="margin-bottom:6px;">
+                    <input type="text" id="cp-nc-telefono" placeholder="Teléfono (opcional)" style="margin-bottom:6px;">
+                    <input type="text" id="cp-nc-direccion" placeholder="Dirección (opcional)" style="margin-bottom:6px;">
+                    <input type="number" id="cp-nc-limite" placeholder="Límite de crédito (opcional)" style="margin-bottom:6px;">
+                    <button type="button" onclick="guardarClienteMovil()" style="background:#16a34a; color:#fff; border:none; border-radius:8px; padding:8px; width:100%;">Guardar cliente</button>
+                </div>
                 <label>Asignar a</label>
                 <select id="cp-repartidor"></select>
+                <label>📦 Agregar productos de bodega</label>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <select id="cp-prod-sel" style="flex:2;"></select>
+                    <input type="number" id="cp-prod-qty" min="1" value="1" style="width:60px;" inputmode="numeric">
+                    <button type="button" onclick="agregarProductoMovil()" style="background:#3b82f6; color:#fff; border:none; border-radius:8px; padding:8px 12px; white-space:nowrap;">+ Agregar</button>
+                </div>
+                <ul id="cp-lista-prod" style="list-style:none; padding:0; margin:8px 0 0;"></ul>
                 <label>¿Qué llevas? (contenido)</label>
                 <input type="text" id="cp-contenido" placeholder="Ej. 5 cajas surtidas" required>
                 <label>Piezas (opcional)</label>
                 <input type="number" id="cp-piezas" min="0" placeholder="0" inputmode="numeric">
                 <label>Total a cobrar ($)</label>
                 <input type="number" id="cp-total" step="0.01" min="0.01" placeholder="0.00" required inputmode="decimal">
+                <label>Fecha de entrega (opcional, para agendar)</label>
+                <input type="date" id="cp-fecha">
                 <button type="submit" class="btn-submit">Crear pedido</button>
             </form>
             <div id="cp-msg" class="gasto-msg"></div>
@@ -660,6 +677,76 @@
                 `<option value="${r.id}" ${repartidor && String(r.id) === String(repartidor.id) ? 'selected' : ''}>${r.nombre}${repartidor && String(r.id) === String(repartidor.id) ? ' (yo)' : ''}</option>`
             ).join('');
         }
+        // #4 · Picker de productos de bodega (igual que en la compu)
+        const selP = document.getElementById('cp-prod-sel');
+        if (selP) {
+            const prods = _datosMovil.productos || [];
+            selP.innerHTML = prods.length
+                ? '<option value="">Selecciona producto...</option>' + prods.map(p =>
+                    `<option value="${p.id}" data-nombre="${p.nombre}" data-precio="${p.precio_caja}" data-stock="${p.stock_actual}">${p.nombre} — ${p.bodega_asignada} (${p.stock_actual})</option>`).join('')
+                : '<option value="">Sin productos con stock</option>';
+        }
+    }
+
+    // #4 · Carrito de productos en el pedido móvil
+    let _carritoMovil = [];
+    function agregarProductoMovil() {
+        const sel = document.getElementById('cp-prod-sel');
+        const opt = sel.options[sel.selectedIndex];
+        if (!sel.value) return;
+        const id = parseInt(sel.value);
+        const nombre = opt.dataset.nombre;
+        const precio = parseFloat(opt.dataset.precio);
+        const stock = parseInt(opt.dataset.stock);
+        const qty = parseInt(document.getElementById('cp-prod-qty').value) || 1;
+        const ex = _carritoMovil.find(p => p.id === id);
+        if ((ex ? ex.qty : 0) + qty > stock) { alert(`Solo hay ${stock} cajas de ${nombre}.`); return; }
+        if (ex) ex.qty += qty; else _carritoMovil.push({ id, nombre, qty, precio });
+        actualizarCarritoMovil();
+    }
+    function quitarProductoMovil(id) {
+        _carritoMovil = _carritoMovil.filter(p => p.id !== id);
+        actualizarCarritoMovil();
+    }
+    function actualizarCarritoMovil() {
+        const ul = document.getElementById('cp-lista-prod');
+        ul.innerHTML = _carritoMovil.map(p =>
+            `<li style="display:flex; justify-content:space-between; align-items:center; background:#fff; border-radius:6px; padding:6px 10px; margin-bottom:4px; font-size:0.88rem;">
+                <span><strong>${p.qty}</strong> ${p.nombre} — $${(p.qty * p.precio).toFixed(2)}</span>
+                <button type="button" onclick="quitarProductoMovil(${p.id})" style="background:none; border:none; color:#ef4444; font-size:1rem;">✕</button>
+            </li>`).join('');
+        if (_carritoMovil.length) {
+            document.getElementById('cp-contenido').value = _carritoMovil.map(p => `${p.qty} cajas ${p.nombre}`).join(' + ');
+            document.getElementById('cp-total').value = _carritoMovil.reduce((s, p) => s + p.qty * p.precio, 0).toFixed(2);
+            document.getElementById('cp-piezas').value = _carritoMovil.reduce((s, p) => s + p.qty, 0);
+        }
+    }
+
+    // #4 · Crear cliente desde el cel
+    function toggleNuevoClienteMovil() {
+        const d = document.getElementById('cp-nuevo-cliente');
+        d.style.display = d.style.display === 'none' ? 'block' : 'none';
+    }
+    async function guardarClienteMovil() {
+        const nombre = document.getElementById('cp-nc-nombre').value.trim();
+        if (!nombre) { alert('Escribe el nombre del cliente'); return; }
+        const payload = {
+            nombre,
+            telefono: document.getElementById('cp-nc-telefono').value.trim(),
+            direccion: document.getElementById('cp-nc-direccion').value.trim(),
+            limite_credito: parseFloat(document.getElementById('cp-nc-limite').value) || 0
+        };
+        try {
+            const res = await fetch(`${API}/pedidos/cliente-movil`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            if (res.ok) {
+                await cargarDatosMovil();
+                document.getElementById('cp-cliente').value = data.id;
+                document.getElementById('cp-nuevo-cliente').style.display = 'none';
+                ['cp-nc-nombre','cp-nc-telefono','cp-nc-direccion','cp-nc-limite'].forEach(i => document.getElementById(i).value = '');
+                alert('Cliente agregado y seleccionado ✓');
+            } else alert(data.mensaje || 'No se pudo agregar');
+        } catch { alert('Error de conexión'); }
     }
 
     function pintarClientesMovil(lista) {
@@ -686,7 +773,8 @@
             cliente_id: document.getElementById('cp-cliente').value,
             contenido: document.getElementById('cp-contenido').value.trim(),
             piezas: parseInt(document.getElementById('cp-piezas').value) || 0,
-            total: parseFloat(document.getElementById('cp-total').value) || 0
+            total: parseFloat(document.getElementById('cp-total').value) || 0,
+            fecha: document.getElementById('cp-fecha').value || null
         };
         if (!payload.cliente_id) { msgEl.className = 'gasto-msg err'; msgEl.style.display = 'block'; msgEl.textContent = 'Selecciona un cliente'; return; }
         try {
@@ -697,7 +785,7 @@
             msgEl.className = `gasto-msg ${res.ok ? 'ok' : 'err'}`;
             msgEl.style.display = 'block';
             msgEl.textContent = data.mensaje;
-            if (res.ok) { e.target.reset(); pintarClientesMovil(_datosMovil.clientes); cargarRuta(); }
+            if (res.ok) { e.target.reset(); _carritoMovil = []; actualizarCarritoMovil(); pintarClientesMovil(_datosMovil.clientes); cargarRuta(); }
         } catch { msgEl.className = 'gasto-msg err'; msgEl.style.display = 'block'; msgEl.textContent = 'Error de conexión'; }
         setTimeout(() => msgEl.style.display = 'none', 4000);
     });

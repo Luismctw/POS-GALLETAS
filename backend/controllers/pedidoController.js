@@ -6,7 +6,7 @@ const db = require('../config/db');
 //  (todavía SIN repartidor). Valida crédito del cliente.
 // =====================================================================
 const crearPedido = async (req, res) => {
-    const { cliente_id, contenido, piezas, total } = req.body;
+    const { cliente_id, contenido, piezas, total, fecha } = req.body;
 
     if (!cliente_id || !contenido || !total) {
         return res.status(400).json({ mensaje: "Faltan datos del pedido (cliente, contenido y precio)" });
@@ -32,8 +32,8 @@ const crearPedido = async (req, res) => {
 
         const [resultado] = await db.query(
             `INSERT INTO pedidos (cliente_id, contenido, piezas, total, estatus, fecha, fecha_creacion)
-             VALUES (?, ?, ?, ?, 'creado', CURDATE(), CURDATE())`,
-            [cliente_id, contenido, piezas || 0, total]
+             VALUES (?, ?, ?, ?, 'creado', COALESCE(?, CURDATE()), CURDATE())`,
+            [cliente_id, contenido, piezas || 0, total, fecha || null]
         );
 
         await db.query("UPDATE clientes SET saldo_deudor = ? WHERE id = ?", [nuevoSaldo, cliente_id]);
@@ -320,6 +320,18 @@ const obtenerControlCarga = async (req, res) => {
             ORDER BY piezas_salida DESC
         `, [fecha, fecha]);
 
+        // #2 · Desglose de qué salió con cada repartidor (contenido + piezas)
+        const [detalles] = await db.query(`
+            SELECT p.repartidor_id, p.contenido, p.piezas, p.estatus
+            FROM pedidos p
+            WHERE p.fecha = ? AND p.repartidor_id IS NOT NULL AND p.piezas > 0
+            ORDER BY p.repartidor_id, p.id
+        `, [fecha]);
+        const detallePorRep = {};
+        detalles.forEach(d => {
+            (detallePorRep[d.repartidor_id] ??= []).push({ contenido: d.contenido, piezas: Number(d.piezas), estatus: d.estatus });
+        });
+
         // Calcular diferencia (piezas perdidas)
         resumen.forEach(r => {
             r.piezas_salida     = Number(r.piezas_salida);
@@ -330,6 +342,7 @@ const obtenerControlCarga = async (req, res) => {
             r.esperado_regreso  = r.piezas_salida - r.piezas_entregadas;
             // Diferencia: si regresó menos de lo esperado, hay cajas sin cuenta
             r.diferencia        = r.esperado_regreso - r.piezas_regresadas;
+            r.detalle           = detallePorRep[r.id] || [];
         });
 
         res.json({ fecha, resumen });
@@ -485,16 +498,35 @@ const datosMovil = async (req, res) => {
         const [repartidores] = await db.query(
             "SELECT id, nombre FROM repartidores WHERE estatus = 'activo' ORDER BY nombre"
         );
-        res.json({ clientes, repartidores });
+        const [productos] = await db.query(
+            "SELECT id, nombre, precio_caja, bodega_asignada, stock_actual FROM productos WHERE stock_actual > 0 ORDER BY nombre"
+        );
+        res.json({ clientes, repartidores, productos });
     } catch (e) {
         console.error('Error datos móvil:', e);
         res.status(500).json({ mensaje: 'Error interno del servidor' });
     }
 };
 
+// ===== #4 · Crear cliente desde la app del repartidor =====
+const crearClienteMovil = async (req, res) => {
+    const { nombre, direccion, telefono, limite_credito } = req.body;
+    if (!nombre) return res.status(400).json({ mensaje: 'El nombre del cliente es obligatorio' });
+    try {
+        const [r] = await db.query(
+            "INSERT INTO clientes (nombre, direccion, telefono, limite_credito, saldo_deudor, estatus) VALUES (?, ?, ?, ?, 0.00, 'activo')",
+            [nombre, direccion || '', telefono || '', limite_credito || 0]
+        );
+        res.status(201).json({ mensaje: 'Cliente agregado', id: r.insertId, nombre });
+    } catch (e) {
+        console.error('Error al crear cliente (móvil):', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
 // ===== #9 · El repartidor crea un pedido desde su app (se lo asigna a sí mismo) =====
 const crearPedidoRepartidor = async (req, res) => {
-    const { repartidor_id, cliente_id, contenido, piezas, total } = req.body;
+    const { repartidor_id, cliente_id, contenido, piezas, total, fecha } = req.body;
     if (!repartidor_id || !cliente_id || !contenido || !total) {
         return res.status(400).json({ mensaje: "Faltan datos del pedido (cliente, contenido y precio)" });
     }
@@ -513,8 +545,8 @@ const crearPedidoRepartidor = async (req, res) => {
         }
         await db.query(
             `INSERT INTO pedidos (cliente_id, repartidor_id, contenido, piezas, total, estatus, fecha, fecha_creacion)
-             VALUES (?, ?, ?, ?, ?, 'pendiente', CURDATE(), CURDATE())`,
-            [cliente_id, repartidor_id, contenido, piezas || 0, total]
+             VALUES (?, ?, ?, ?, ?, 'pendiente', COALESCE(?, CURDATE()), CURDATE())`,
+            [cliente_id, repartidor_id, contenido, piezas || 0, total, fecha || null]
         );
         await db.query("UPDATE clientes SET saldo_deudor = ? WHERE id = ?", [nuevoSaldo, cliente_id]);
         res.status(201).json({ mensaje: 'Pedido creado y asignado a ti.' });
@@ -547,6 +579,7 @@ module.exports = {
     crearPedido,
     asignarPedido,
     datosMovil,
+    crearClienteMovil,
     crearPedidoRepartidor,
     reasignarPedido,
     obtenerPedidosCreados,

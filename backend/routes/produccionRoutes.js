@@ -16,7 +16,9 @@ const {
     obtenerBodegas,
     crearBodega,
     eliminarBodega,
-    producirComboPorPorcentaje
+    producirComboPorPorcentaje,
+    actualizarBodegaProducto,
+    editarReceta
 } = require('../controllers/produccionController');
 
 // Bodegas dinámicas
@@ -36,7 +38,9 @@ router.get('/productos', obtenerProductos);
 router.get('/recetas', obtenerProductosConReceta);
 router.post('/nuevo-producto', crearProductoConReceta);
 router.put('/productos/:id', editarProducto);
+router.patch('/productos/:id/bodega', actualizarBodegaProducto);
 router.delete('/productos/:id', eliminarProducto);
+router.put('/recetas/:id', editarReceta);
 
 // Producir por receta (descuenta materia prima y suma producto terminado)
 router.post('/producir', producirPorReceta);

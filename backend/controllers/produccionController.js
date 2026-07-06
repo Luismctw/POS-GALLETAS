@@ -419,6 +419,47 @@ const editarProducto = async (req, res) => {
     }
 };
 
+// #3 · Traspasar un producto a otra bodega (mueve todo su stock)
+const actualizarBodegaProducto = async (req, res) => {
+    const { id } = req.params;
+    const { bodega_asignada } = req.body;
+    if (!bodega_asignada) return res.status(400).json({ mensaje: 'Bodega requerida' });
+    try {
+        const [r] = await db.query("UPDATE productos SET bodega_asignada = ? WHERE id = ?", [bodega_asignada, id]);
+        if (r.affectedRows === 0) return res.status(404).json({ mensaje: 'Producto no encontrado' });
+        res.json({ mensaje: 'Producto trasladado de bodega' });
+    } catch (e) {
+        console.error('Error al trasladar producto:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
+// #5 · Editar una receta (nombre, precio, bodega y sus ingredientes)
+const editarReceta = async (req, res) => {
+    const { id } = req.params;
+    const { nombre, precio_caja, bodega_asignada, receta } = req.body;
+    if (!nombre || precio_caja === undefined) return res.status(400).json({ mensaje: 'Nombre y precio son obligatorios' });
+    if (!Array.isArray(receta) || receta.length === 0) return res.status(400).json({ mensaje: 'La receta debe tener al menos un ingrediente' });
+    try {
+        await db.query("START TRANSACTION");
+        const [r] = await db.query(
+            "UPDATE productos SET nombre = ?, precio_caja = ?, bodega_asignada = COALESCE(?, bodega_asignada) WHERE id = ? AND tipo = 'propio'",
+            [nombre, precio_caja, bodega_asignada || null, id]
+        );
+        if (r.affectedRows === 0) { await db.query("ROLLBACK"); return res.status(404).json({ mensaje: 'Receta no encontrada' }); }
+        await db.query("DELETE FROM producto_insumo WHERE producto_id = ?", [id]);
+        for (const ing of receta) {
+            await db.query("INSERT INTO producto_insumo (producto_id, insumo_id, cantidad_necesaria) VALUES (?, ?, ?)", [id, ing.insumo_id, ing.cantidad_necesaria]);
+        }
+        await db.query("COMMIT");
+        res.json({ mensaje: 'Receta actualizada' });
+    } catch (e) {
+        await db.query("ROLLBACK");
+        console.error('Error al editar receta:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
 // Eliminar un producto (y su receta si la tiene)
 const eliminarProducto = async (req, res) => {
     const { id } = req.params;
@@ -505,5 +546,7 @@ module.exports = {
     obtenerBodegas,
     crearBodega,
     eliminarBodega,
-    producirComboPorPorcentaje
+    producirComboPorPorcentaje,
+    actualizarBodegaProducto,
+    editarReceta
 };
