@@ -1,4 +1,4 @@
-const CACHE = 'pos-repartidor-v1';
+const CACHE = 'pos-repartidor-v2';
 const ASSETS = ['/ruta_movil.html'];
 
 self.addEventListener('install', e => {
@@ -25,8 +25,11 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(e.request)
         .then(res => {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, copy));
+          // Solo cachear respuestas correctas (evita guardar páginas 503/error de despliegues)
+          if (res && res.ok && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, copy));
+          }
           return res;
         })
         .catch(() => caches.match(e.request))
