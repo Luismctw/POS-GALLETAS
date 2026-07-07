@@ -1,4 +1,4 @@
-const CACHE = 'pos-repartidor-v2';
+const CACHE = 'pos-repartidor-v3';
 const ASSETS = ['/ruta_movil.html'];
 
 self.addEventListener('install', e => {
@@ -32,7 +32,18 @@ self.addEventListener('fetch', e => {
           }
           return res;
         })
-        .catch(() => caches.match(e.request))
+        .catch(async () => {
+          const cached = await caches.match(e.request);
+          if (cached && cached.ok) return cached;
+          // Sin copia buena: nunca mostrar en blanco; página que se reintenta sola
+          if (e.request.mode === 'navigate') {
+            return new Response(
+              '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="3"><body style="font-family:sans-serif;text-align:center;padding-top:60px;color:#334155"><h2>Reconectando…</h2><p>Revisa tu internet. La app se recargará sola.</p></body>',
+              { headers: { 'Content-Type': 'text/html' } }
+            );
+          }
+          return cached || Response.error();
+        })
     );
   }
 });
