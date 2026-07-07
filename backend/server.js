@@ -11,6 +11,14 @@ const port = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Service workers: SIEMPRE sin caché HTTP, para que el navegador agarre la
+// última versión de inmediato (evita quedarse pegado en una versión vieja).
+app.get(['/sw.js', '/sw-repartidor.js'], (req, res) => {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(path.join(__dirname, '..', 'frontend', req.path.replace(/^\//, '')));
+});
+
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
 const db = require('./config/db');

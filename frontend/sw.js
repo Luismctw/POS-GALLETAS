@@ -1,55 +1,38 @@
-const CACHE = 'pos-galletas-v3';
-const ASSETS = [
-  '/dashboard.html',
-  '/css/dashboard.css',
-  '/js/dashboard.js'
-];
+// v4 — El HTML SIEMPRE se baja de internet (nunca desde caché) para no quedar
+// pegado en una versión vieja/blanca. Al activarse, borra TODAS las cachés viejas.
+const CACHE = 'pos-galletas-v4';
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
-  self.skipWaiting();
-});
+self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k))); // purga toda caché previa (incluye la envenenada)
+    await self.clients.claim();
+  })());
 });
 
-// Network first para el API, cache first para assets estáticos
 self.addEventListener('fetch', e => {
-  if (e.request.url.includes('/api/')) {
-    // API: siempre red, sin cache
-    e.respondWith(fetch(e.request).catch(() => new Response(
+  const req = e.request;
+
+  if (req.url.includes('/api/')) {
+    e.respondWith(fetch(req).catch(() => new Response(
       JSON.stringify({ mensaje: 'Sin conexión' }),
       { headers: { 'Content-Type': 'application/json' } }
     )));
-  } else {
-    // Assets: red primero, cache como respaldo
-    e.respondWith(
-      fetch(e.request)
-        .then(res => {
-          // Solo cachear respuestas correctas (evita guardar páginas 503/error de despliegues)
-          if (res && res.ok && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE).then(c => c.put(e.request, copy));
-          }
-          return res;
-        })
-        .catch(async () => {
-          const cached = await caches.match(e.request);
-          if (cached && cached.ok) return cached;
-          if (e.request.mode === 'navigate') {
-            return new Response(
-              '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="3"><body style="font-family:sans-serif;text-align:center;padding-top:60px;color:#334155"><h2>Reconectando…</h2><p>Revisa tu internet. La app se recargará sola.</p></body>',
-              { headers: { 'Content-Type': 'text/html' } }
-            );
-          }
-          return cached || Response.error();
-        })
-    );
+    return;
   }
+
+  // Todo lo demás (incluido el HTML): SIEMPRE red. Nunca se sirve HTML cacheado.
+  e.respondWith(
+    fetch(req).catch(() => {
+      if (req.mode === 'navigate') {
+        return new Response(
+          '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="3"><body style="font-family:sans-serif;text-align:center;padding-top:60px;color:#334155"><h2>Reconectando…</h2><p>Revisa tu internet. La app se recargará sola.</p></body>',
+          { headers: { 'Content-Type': 'text/html' } }
+        );
+      }
+      return Response.error();
+    })
+  );
 });
