@@ -774,7 +774,8 @@
             contenido: document.getElementById('cp-contenido').value.trim(),
             piezas: parseInt(document.getElementById('cp-piezas').value) || 0,
             total: parseFloat(document.getElementById('cp-total').value) || 0,
-            fecha: document.getElementById('cp-fecha').value || null
+            fecha: document.getElementById('cp-fecha').value || null,
+            productos: _carritoMovil.map(p => ({ producto_id: p.id, cantidad: p.qty }))
         };
         if (!payload.cliente_id) { msgEl.className = 'gasto-msg err'; msgEl.style.display = 'block'; msgEl.textContent = 'Selecciona un cliente'; return; }
         try {

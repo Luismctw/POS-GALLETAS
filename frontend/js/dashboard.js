@@ -241,7 +241,9 @@ document.getElementById('form-pedido').addEventListener('submit', async (e) => {
         contenido: document.getElementById('contenido').value,
         piezas: document.getElementById('piezas').value || 0,
         total: document.getElementById('total').value,
-        fecha: document.getElementById('pedido_fecha').value || null
+        fecha: document.getElementById('pedido_fecha').value || null,
+        // Productos seleccionados de la bodega (para descontar stock al entregar)
+        productos: _productosPedido.map(p => ({ producto_id: p.id, cantidad: p.qty }))
     };
     const el = document.getElementById('mensaje-pedido');
     try {

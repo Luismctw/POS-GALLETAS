@@ -1,12 +1,28 @@
 const db = require('../config/db');
 
+// Guarda las líneas de productos de un pedido (para descontar stock al entregar).
+// Acepta un arreglo [{ producto_id, cantidad }]. Si no viene, no hace nada.
+async function guardarProductosPedido(pedidoId, productos) {
+    if (!Array.isArray(productos)) return;
+    for (const p of productos) {
+        const prodId = parseInt(p.producto_id);
+        const cant = parseInt(p.cantidad);
+        if (prodId && cant > 0) {
+            await db.query(
+                "INSERT INTO pedido_productos (pedido_id, producto_id, cantidad) VALUES (?, ?, ?)",
+                [pedidoId, prodId, cant]
+            );
+        }
+    }
+}
+
 // =====================================================================
 //  1. CREAR PEDIDO  (en el área de Producción)
 //  Contenido + cliente + piezas + precio. Queda en estatus 'creado'
 //  (todavía SIN repartidor). Valida crédito del cliente.
 // =====================================================================
 const crearPedido = async (req, res) => {
-    const { cliente_id, contenido, piezas, total, fecha } = req.body;
+    const { cliente_id, contenido, piezas, total, fecha, productos } = req.body;
 
     if (!cliente_id || !contenido || !total) {
         return res.status(400).json({ mensaje: "Faltan datos del pedido (cliente, contenido y precio)" });
@@ -37,6 +53,9 @@ const crearPedido = async (req, res) => {
         );
 
         await db.query("UPDATE clientes SET saldo_deudor = ? WHERE id = ?", [nuevoSaldo, cliente_id]);
+
+        // Guardar los productos del pedido (para descontar stock al entregar)
+        await guardarProductosPedido(resultado.insertId, productos);
 
         res.status(201).json({ mensaje: 'Pedido creado. Ya puede asignarse a un repartidor.', pedido_id: resultado.insertId });
     } catch (error) {
@@ -197,11 +216,12 @@ const entregarPedido = async (req, res) => {
     try {
         await db.query("START TRANSACTION");
 
-        const [pedido] = await db.query("SELECT cliente_id, total FROM pedidos WHERE id = ?", [id]);
+        const [pedido] = await db.query("SELECT cliente_id, total, estatus FROM pedidos WHERE id = ?", [id]);
         if (!pedido.length) {
             await db.query("ROLLBACK");
             return res.status(404).json({ mensaje: 'Pedido no encontrado' });
         }
+        const yaEntregado = pedido[0].estatus === 'entregado';
 
         await db.query(
             "UPDATE pedidos SET estatus = 'entregado', monto_cobrado = ? WHERE id = ?",
@@ -214,6 +234,19 @@ const entregarPedido = async (req, res) => {
                 "UPDATE clientes SET saldo_deudor = GREATEST(0, saldo_deudor - ?) WHERE id = ?",
                 [cobrado, pedido[0].cliente_id]
             );
+        }
+
+        // Descontar del stock de la bodega los productos entregados (solo la primera vez)
+        if (!yaEntregado) {
+            const [lineas] = await db.query(
+                "SELECT producto_id, cantidad FROM pedido_productos WHERE pedido_id = ?", [id]
+            );
+            for (const l of lineas) {
+                await db.query(
+                    "UPDATE productos SET stock_actual = GREATEST(0, stock_actual - ?) WHERE id = ?",
+                    [l.cantidad, l.producto_id]
+                );
+            }
         }
 
         await db.query("COMMIT");
@@ -479,6 +512,7 @@ const eliminarPedido = async (req, res) => {
         }
         // Soltar referencias de reagendado para no romper la clave foránea
         await db.query("UPDATE pedidos SET reagendado_de = NULL WHERE reagendado_de = ?", [id]);
+        await db.query("DELETE FROM pedido_productos WHERE pedido_id = ?", [id]);
         await db.query("DELETE FROM pedidos WHERE id = ?", [id]);
         await db.query('COMMIT');
         res.json({ mensaje: 'Pedido eliminado' });
@@ -526,7 +560,7 @@ const crearClienteMovil = async (req, res) => {
 
 // ===== #9 · El repartidor crea un pedido desde su app (se lo asigna a sí mismo) =====
 const crearPedidoRepartidor = async (req, res) => {
-    const { repartidor_id, cliente_id, contenido, piezas, total, fecha } = req.body;
+    const { repartidor_id, cliente_id, contenido, piezas, total, fecha, productos } = req.body;
     if (!repartidor_id || !cliente_id || !contenido || !total) {
         return res.status(400).json({ mensaje: "Faltan datos del pedido (cliente, contenido y precio)" });
     }
@@ -543,12 +577,13 @@ const crearPedidoRepartidor = async (req, res) => {
             const disponible = parseFloat(cliente.limite_credito) - parseFloat(cliente.saldo_deudor);
             return res.status(400).json({ mensaje: `Límite de crédito excedido. Disponible: $${disponible.toFixed(2)}` });
         }
-        await db.query(
+        const [resultado] = await db.query(
             `INSERT INTO pedidos (cliente_id, repartidor_id, contenido, piezas, total, estatus, fecha, fecha_creacion)
              VALUES (?, ?, ?, ?, ?, 'pendiente', COALESCE(?, CURDATE()), CURDATE())`,
             [cliente_id, repartidor_id, contenido, piezas || 0, total, fecha || null]
         );
         await db.query("UPDATE clientes SET saldo_deudor = ? WHERE id = ?", [nuevoSaldo, cliente_id]);
+        await guardarProductosPedido(resultado.insertId, productos);
         res.status(201).json({ mensaje: 'Pedido creado y asignado a ti.' });
     } catch (e) {
         console.error('Error al crear pedido (repartidor):', e);

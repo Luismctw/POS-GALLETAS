@@ -84,6 +84,16 @@ CREATE TABLE IF NOT EXISTS `pedidos` (
   CONSTRAINT `ped_rea` FOREIGN KEY (`reagendado_de`) REFERENCES `pedidos` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS `pedido_productos` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `pedido_id` int NOT NULL,
+  `producto_id` int NOT NULL,
+  `cantidad` int NOT NULL DEFAULT '1',
+  PRIMARY KEY (`id`),
+  KEY `pp_pedido` (`pedido_id`),
+  KEY `pp_producto` (`producto_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS `gastos` (
   `id` int NOT NULL AUTO_INCREMENT,
   `repartidor_id` int DEFAULT NULL,
