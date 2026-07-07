@@ -531,8 +531,11 @@
     <script src="js/dashboard.js"></script>
 
 <script>
+  // La app ya NO usa service worker (carga siempre fresca de internet).
+  // Por si algún dispositivo tiene uno viejo registrado, lo eliminamos.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+    if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
   }
 </script>
 </body>
