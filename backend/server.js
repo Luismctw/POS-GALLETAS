@@ -66,6 +66,7 @@ app.use('/api/clientes',     adminAuth, require('./routes/clienteRoutes'));
 app.use('/api/produccion',   adminAuth, require('./routes/produccionRoutes'));
 app.use('/api/compras',      adminAuth, require('./routes/compraRoutes'));
 app.use('/api/balance',      adminAuth, require('./routes/balanceRoutes'));
+app.use('/api/capital',      adminAuth, require('./routes/capitalRoutes'));
 app.use('/api/deudas-negocio', adminAuth, require('./routes/deudaNegocioRoutes'));
 
 // Endpoint manual "Cerrar el día"

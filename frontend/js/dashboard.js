@@ -75,6 +75,7 @@ function cambiarVista(vista) {
         produccion: async () => { await cargarBodegas(); cargarInsumosReceta(); cargarRecetasProducir(); },
         compras: () => { cargarInsumosCompra(); cargarTicketsCompra(); cargarAnalisisCompras(); },
         contabilidad: () => { cargarBalance('dia'); cargarDeudas(); cargarContabProduccion(); cargarTicketsBalance('dia'); },
+        capital: cargarCapital,
         clientes: cargarClientes,
         repartidores: cargarRepartidores,
         frecuencia: cargarFrecuencia,
@@ -122,22 +123,38 @@ function filtrarClientesSelect() {
 let _productosPedido = []; // carrito temporal
 
 // Solo refresca el <select> del picker sin tocar el carrito
+let _prodBodegaCache = [];
 async function cargarSelectorBodega() {
     try {
         const prods = await (await fetch(`${API}/produccion/productos`)).json();
-        const sel = document.getElementById('prod-bodega-sel');
-        const disponibles = prods.filter(p => p.stock_actual > 0);
-        if (disponibles.length === 0) {
-            sel.innerHTML = '<option value="">Sin stock en bodegas</option>';
-        } else {
-            sel.innerHTML = '<option value="">Selecciona producto...</option>' +
-                disponibles.map(p =>
-                    `<option value="${p.id}" data-precio="${esc(p.precio_caja)}" data-stock="${esc(p.stock_actual)}" data-nombre="${esc(p.nombre)}">
-                        ${esc(p.nombre)} — ${esc(p.bodega_asignada)} (${esc(p.stock_actual)} cajas)
-                    </option>`
-                ).join('');
+        _prodBodegaCache = prods.filter(p => p.stock_actual > 0);
+        // #2 · Llenar el filtro de bodega con las bodegas que tienen stock
+        const filtro = document.getElementById('prod-bodega-filtro');
+        if (filtro) {
+            const bodegas = [...new Set(_prodBodegaCache.map(p => String(p.bodega_asignada)))];
+            const actual = filtro.value;
+            filtro.innerHTML = '<option value="">Todas las bodegas</option>' +
+                bodegas.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
+            if (actual && bodegas.includes(actual)) filtro.value = actual;
         }
+        pintarSelectorProductos();
     } catch (e) { console.error(e); }
+}
+
+// Rellena el selector de productos según la bodega elegida en el filtro
+function pintarSelectorProductos() {
+    const sel = document.getElementById('prod-bodega-sel');
+    if (!sel) return;
+    const filtro = document.getElementById('prod-bodega-filtro');
+    const bod = filtro ? filtro.value : '';
+    const lista = bod ? _prodBodegaCache.filter(p => String(p.bodega_asignada) === bod) : _prodBodegaCache;
+    if (!lista.length) { sel.innerHTML = '<option value="">Sin stock en esta bodega</option>'; return; }
+    sel.innerHTML = '<option value="">Selecciona producto...</option>' +
+        lista.map(p =>
+            `<option value="${p.id}" data-precio="${esc(p.precio_caja)}" data-stock="${esc(p.stock_actual)}" data-nombre="${esc(p.nombre)}">
+                ${esc(p.nombre)} — ${esc(p.bodega_asignada)} (${esc(p.stock_actual)} cajas)
+            </option>`
+        ).join('');
 }
 
 // Limpia el carrito y recarga el selector (solo en submit exitoso)
@@ -1207,6 +1224,59 @@ async function cargarContabProduccion() {
         if (prom) prom.innerHTML = '';
         tbody.innerHTML = '<tr><td colspan="3">Error al cargar</td></tr>';
     }
+}
+
+// ====================== CAPITAL / CAJA ======================
+async function cargarCapital() {
+    const tbody = document.getElementById('tabla-capital');
+    try {
+        const d = await (await fetch(`${API}/capital`)).json();
+        document.getElementById('capital-disponible').textContent = `$${Number(d.disponible).toFixed(2)}`;
+        document.getElementById('capital-disponible').style.color = Number(d.disponible) >= 0 ? '#16a34a' : '#dc2626';
+        document.getElementById('capital-detalle').innerHTML =
+            `Entradas netas: $${Number(d.entradas).toFixed(2)} · Gastos: $${Number(d.gastos).toFixed(2)} · Compras: $${Number(d.compras).toFixed(2)}`;
+        tbody.innerHTML = d.movimientos.length ? '' : '<tr><td colspan="5" style="color:#94a3b8;">Sin movimientos</td></tr>';
+        d.movimientos.forEach(m => {
+            const esEntrada = m.tipo === 'entrada';
+            const color = esEntrada ? '#16a34a' : '#dc2626';
+            const signo = esEntrada ? '+' : '−';
+            const accion = m.origen === 'manual'
+                ? `<button onclick="eliminarMovimientoCapital(${esc(m.id)})" title="Eliminar" style="padding:3px 8px; font-size:0.78rem; background:#ef4444; color:#fff; border:none; border-radius:6px; cursor:pointer;">🗑</button>`
+                : `<small style="color:#94a3b8;">auto</small>`;
+            tbody.innerHTML += `<tr>
+                <td>${esc(m.fecha)}</td>
+                <td>${esc(m.concepto) || '-'}</td>
+                <td><span style="color:${color}; font-weight:bold; text-transform:capitalize;">${esc(m.tipo)}</span></td>
+                <td style="color:${color}; font-weight:bold;">${signo}$${Number(m.monto).toFixed(2)}</td>
+                <td>${accion}</td></tr>`;
+        });
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="5">Error al cargar</td></tr>'; }
+}
+
+document.getElementById('form-capital').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const el = document.getElementById('mensaje-capital');
+    const payload = {
+        tipo: document.getElementById('capital-tipo').value,
+        monto: document.getElementById('capital-monto').value,
+        concepto: document.getElementById('capital-concepto').value
+    };
+    try {
+        const res = await fetch(`${API}/capital`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        msg(el, res.ok, data.mensaje);
+        if (res.ok) { e.target.reset(); cargarCapital(); }
+    } catch (err) { msg(el, false, 'Error de conexión'); }
+});
+
+async function eliminarMovimientoCapital(id) {
+    if (!confirm('¿Eliminar este movimiento de capital?')) return;
+    try {
+        const res = await fetch(`${API}/capital/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) cargarCapital();
+        else alert(data.mensaje || 'No se pudo eliminar');
+    } catch (e) { alert('Error de conexión'); }
 }
 
 // ====================== CLIENTES ======================

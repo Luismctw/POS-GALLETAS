@@ -94,6 +94,15 @@ CREATE TABLE IF NOT EXISTS `pedido_productos` (
   KEY `pp_producto` (`producto_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS `capital_movimientos` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `tipo` enum('entrada','salida') NOT NULL,
+  `monto` decimal(10,2) NOT NULL,
+  `concepto` varchar(255) DEFAULT NULL,
+  `fecha` date DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS `gastos` (
   `id` int NOT NULL AUTO_INCREMENT,
   `repartidor_id` int DEFAULT NULL,

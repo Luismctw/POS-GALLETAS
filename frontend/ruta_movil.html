@@ -347,6 +347,15 @@
         </div>
     </div>
 
+    <!-- Tab: Clientes que deben (#4) -->
+    <div id="tab-deudas" class="tab-body" style="display:none;">
+        <div style="padding:12px 16px;">
+            <div style="font-weight:800; color:#dc2626; margin-bottom:4px;">💳 Clientes que deben</div>
+            <div style="font-size:0.85rem; color:#64748b; margin-bottom:12px;">Total por cobrar: <strong id="deudas-total">$0.00</strong></div>
+            <div id="deudas-lista" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+    </div>
+
     <nav>
         <button class="nav-btn active" id="nav-ruta" onclick="switchTab('ruta', this)">
             <span class="nav-icon-wrap">
@@ -367,6 +376,10 @@
             <span class="nav-icon">📊</span>
             Resumen
         </button>
+        <button class="nav-btn" id="nav-deudas" onclick="switchTab('deudas', this)">
+            <span class="nav-icon">💳</span>
+            Deudas
+        </button>
     </nav>
 </div>
 
@@ -376,7 +389,12 @@
         <h3>💰 Confirmar entrega</h3>
         <p class="modal-sub" id="modal-sub">Pedido #—</p>
         <label>Monto cobrado al cliente ($)</label>
-        <input type="number" id="modal-monto" step="0.01" min="0" inputmode="decimal" placeholder="0.00">
+        <input type="number" id="modal-monto" step="0.01" min="0" inputmode="decimal" placeholder="0.00" oninput="calcularDeudaModal()">
+        <div style="display:flex; gap:8px; margin:6px 0;">
+            <button type="button" onclick="pagoCompletoModal()" style="flex:1; background:#16a34a; color:#fff; border:none; border-radius:8px; padding:8px; font-size:0.85rem;">Pagó todo</button>
+            <button type="button" onclick="quedaDeberModal()" style="flex:1; background:#f59e0b; color:#fff; border:none; border-radius:8px; padding:8px; font-size:0.85rem;">Queda a deber todo</button>
+        </div>
+        <div id="modal-deuda" style="text-align:center; font-weight:700; margin:4px 0 8px; font-size:0.95rem;"></div>
         <div class="modal-btns">
             <button class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
             <button class="btn-confirm" onclick="confirmarEntrega()">Confirmar entrega</button>
@@ -574,13 +592,27 @@
     }
 
     // ===== MODAL COBRO =====
+    let totalEnCurso = 0;
     function abrirModalCobro(id, total) {
         pedidoEnCurso = id;
+        totalEnCurso = Number(total) || 0;
         document.getElementById('modal-sub').textContent = `Pedido #${id} · Total: ${fmt$(total)}`;
-        document.getElementById('modal-monto').value = Number(total).toFixed(2);
+        document.getElementById('modal-monto').value = totalEnCurso.toFixed(2);
+        calcularDeudaModal();
         document.getElementById('modal-cobro').classList.remove('hidden');
         setTimeout(() => document.getElementById('modal-monto').focus(), 100);
     }
+    // #1 · Muestra cuánto queda a deber el cliente según lo que paga
+    function calcularDeudaModal() {
+        const pagado = parseFloat(document.getElementById('modal-monto').value) || 0;
+        const deuda = totalEnCurso - pagado;
+        const el = document.getElementById('modal-deuda');
+        if (deuda > 0.001) { el.style.color = '#d97706'; el.textContent = `Queda debiendo: ${fmt$(deuda)}`; }
+        else if (deuda < -0.001) { el.style.color = '#dc2626'; el.textContent = `Pagó de más: ${fmt$(-deuda)}`; }
+        else { el.style.color = '#16a34a'; el.textContent = 'Pagó completo ✓'; }
+    }
+    function pagoCompletoModal() { document.getElementById('modal-monto').value = totalEnCurso.toFixed(2); calcularDeudaModal(); }
+    function quedaDeberModal() { document.getElementById('modal-monto').value = '0'; calcularDeudaModal(); }
     function cerrarModal() {
         document.getElementById('modal-cobro').classList.add('hidden');
         pedidoEnCurso = null;
@@ -908,14 +940,36 @@
 
     // ===== NAVEGACIÓN =====
     function switchTab(tab, btn) {
-        ['ruta','crear','gastos','resumen'].forEach(t => {
+        ['ruta','crear','gastos','resumen','deudas'].forEach(t => {
             document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
         });
         if (tab === 'gastos') cargarGastosLista();
         if (tab === 'resumen') cargarResumen();
         if (tab === 'crear') cargarDatosMovil();
+        if (tab === 'deudas') cargarDeudasMovil();
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+    }
+
+    // #4 · Clientes que deben (para cobrar en el futuro)
+    async function cargarDeudasMovil() {
+        const wrap = document.getElementById('deudas-lista');
+        // Refresca los datos por si cambiaron
+        try { _datosMovil = await (await fetch(`${API}/pedidos/datos-movil`)).json(); } catch {}
+        const deudores = (_datosMovil.clientes || [])
+            .filter(c => Number(c.saldo_deudor) > 0)
+            .sort((a, b) => Number(b.saldo_deudor) - Number(a.saldo_deudor));
+        const total = deudores.reduce((s, c) => s + Number(c.saldo_deudor), 0);
+        document.getElementById('deudas-total').textContent = fmt$(total);
+        if (!deudores.length) {
+            wrap.innerHTML = '<div style="color:#94a3b8; text-align:center; padding:16px;">Nadie debe dinero 🎉</div>';
+            return;
+        }
+        wrap.innerHTML = deudores.map(c => `
+            <div style="background:#fff; border-radius:10px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+                <strong>${c.nombre}</strong>
+                <span style="font-weight:800; color:#dc2626;">${fmt$(Number(c.saldo_deudor))}</span>
+            </div>`).join('');
     }
 
     document.getElementById('btn-logout').addEventListener('click', () => {
