@@ -343,6 +343,7 @@ const obtenerControlCarga = async (req, res) => {
                 r.id, r.nombre AS repartidor,
                 IFNULL(SUM(p.piezas), 0) AS piezas_salida,
                 IFNULL(SUM(CASE WHEN p.estatus='entregado' THEN p.piezas ELSE 0 END), 0) AS piezas_entregadas,
+                IFNULL(SUM(CASE WHEN p.estatus='entregado' THEN p.monto_cobrado ELSE 0 END), 0) AS cobrado,
                 IFNULL(ret.piezas_regresadas, 0) AS piezas_regresadas,
                 ret.notas AS notas_retorno
             FROM repartidores r
@@ -353,19 +354,31 @@ const obtenerControlCarga = async (req, res) => {
             ORDER BY piezas_salida DESC
         `, [fecha, fecha]);
 
-        // #2 · Desglose de qué salió con cada repartidor (contenido + piezas)
-        const [detalles] = await db.query(`
-            SELECT p.repartidor_id, p.contenido, p.piezas, p.estatus
-            FROM pedidos p
-            WHERE p.fecha = ? AND p.repartidor_id IS NOT NULL AND p.piezas > 0
-            ORDER BY p.repartidor_id, p.id
+        // #1 · Resumen TOTAL de lo que se llevó cada repartidor, sumado por producto
+        //      (no pedido por pedido). Sale de las líneas de producto de sus pedidos.
+        const [porProducto] = await db.query(`
+            SELECT p.repartidor_id, pr.nombre AS producto, SUM(pp.cantidad) AS cantidad
+            FROM pedido_productos pp
+            JOIN pedidos p   ON pp.pedido_id = p.id
+            JOIN productos pr ON pp.producto_id = pr.id
+            WHERE p.fecha = ? AND p.repartidor_id IS NOT NULL
+            GROUP BY p.repartidor_id, pp.producto_id
+            ORDER BY cantidad DESC
         `, [fecha]);
-        const detallePorRep = {};
-        detalles.forEach(d => {
-            (detallePorRep[d.repartidor_id] ??= []).push({ contenido: d.contenido, piezas: Number(d.piezas), estatus: d.estatus });
+        const productosPorRep = {};
+        porProducto.forEach(d => {
+            (productosPorRep[d.repartidor_id] ??= []).push({ producto: d.producto, cantidad: Number(d.cantidad) });
         });
 
-        // Calcular diferencia (piezas perdidas)
+        // #2 · Gastos del día por repartidor (para saber cuánto dinero debe entregar)
+        const [gastosRows] = await db.query(
+            "SELECT repartidor_id, IFNULL(SUM(monto),0) AS total FROM gastos WHERE fecha = ? GROUP BY repartidor_id",
+            [fecha]
+        );
+        const gastosPorRep = {};
+        gastosRows.forEach(g => { gastosPorRep[g.repartidor_id] = Number(g.total); });
+
+        // Calcular diferencia (piezas perdidas) y el dinero a entregar
         resumen.forEach(r => {
             r.piezas_salida     = Number(r.piezas_salida);
             r.piezas_entregadas = Number(r.piezas_entregadas);
@@ -375,7 +388,12 @@ const obtenerControlCarga = async (req, res) => {
             r.esperado_regreso  = r.piezas_salida - r.piezas_entregadas;
             // Diferencia: si regresó menos de lo esperado, hay cajas sin cuenta
             r.diferencia        = r.esperado_regreso - r.piezas_regresadas;
-            r.detalle           = detallePorRep[r.id] || [];
+            // Resumen de productos que se llevó (totales)
+            r.productos         = productosPorRep[r.id] || [];
+            // Dinero: lo que cobró menos sus gastos = lo que debe entregar
+            r.cobrado           = Number(r.cobrado) || 0;
+            r.gastos            = gastosPorRep[r.id] || 0;
+            r.debe_entregar     = r.cobrado - r.gastos;
         });
 
         res.json({ fecha, resumen });

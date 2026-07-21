@@ -1539,9 +1539,16 @@ async function cargarControlCarga() {
                         </button>
                     </td>
                 </tr>
-                ${(r.detalle && r.detalle.length) ? `<tr><td colspan="8" style="padding:6px 12px; background:#fff;">
-                    <div style="font-size:0.82rem; color:#475569;"><strong>📦 Salió con:</strong> ${r.detalle.map(dd => `${esc(dd.contenido) || 'Sin detalle'} <span style="color:#94a3b8;">(${dd.piezas} pzas${dd.estatus === 'entregado' ? ' · entregado' : ''})</span>`).join(' &nbsp;·&nbsp; ')}</div>
+                ${(r.productos && r.productos.length) ? `<tr><td colspan="8" style="padding:6px 12px; background:#fff;">
+                    <div style="font-size:0.85rem; color:#475569;"><strong>📦 Se llevó (total):</strong> ${r.productos.map(pp => `<span style="background:#eef2ff; color:#3730a3; padding:2px 8px; border-radius:10px; margin-right:6px; display:inline-block;"><strong>${esc(pp.cantidad)}</strong> ${esc(pp.producto)}</span>`).join('')}</div>
                 </td></tr>` : ''}
+                <tr><td colspan="8" style="padding:6px 12px; background:#f8fafc; border-top:1px solid #e2e8f0;">
+                    <div style="font-size:0.88rem; color:#475569; display:flex; gap:18px; flex-wrap:wrap; align-items:center;">
+                        <span>💵 Cobró: <strong style="color:#16a34a;">$${Number(r.cobrado).toFixed(2)}</strong></span>
+                        <span>➖ Gastos: <strong style="color:#dc2626;">$${Number(r.gastos).toFixed(2)}</strong></span>
+                        <span style="background:#1e293b; color:#fff; padding:4px 12px; border-radius:8px; font-weight:800;">Debe entregar: $${Number(r.debe_entregar).toFixed(2)}</span>
+                    </div>
+                </td></tr>
                 ${r.notas_retorno ? `<tr><td colspan="8" style="color:#64748b; font-size:0.85rem; padding:4px 12px;">📝 Nota: ${esc(r.notas_retorno)}</td></tr>` : ''}`;
 
             return `
