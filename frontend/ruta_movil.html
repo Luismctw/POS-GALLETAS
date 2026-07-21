@@ -326,6 +326,9 @@
                 </div>
                 <label>Asignar a</label>
                 <select id="cp-repartidor"></select>
+                <div style="background:#fef3c7; border-left:4px solid #f59e0b; border-radius:8px; padding:9px 11px; margin:8px 0; font-size:0.8rem; color:#92400e; line-height:1.4;">
+                    <strong>⚠️ Importante:</strong> agrega los productos <strong>desde aquí abajo</strong>. Solo así se descuenta el inventario de la bodega y el pedido cuenta en los reportes.
+                </div>
                 <label>📦 Agregar productos de bodega</label>
                 <div style="display:flex; gap:6px; align-items:center;">
                     <select id="cp-prod-sel" style="flex:2;"></select>
@@ -810,6 +813,7 @@
             productos: _carritoMovil.map(p => ({ producto_id: p.id, cantidad: p.qty }))
         };
         if (!payload.cliente_id) { msgEl.className = 'gasto-msg err'; msgEl.style.display = 'block'; msgEl.textContent = 'Selecciona un cliente'; return; }
+        if (_carritoMovil.length === 0 && !confirm('⚠️ No agregaste productos de bodega.\n\nEl pedido se creará, pero NO se descontará del inventario ni contará en los reportes.\n\n¿Crear de todos modos?')) return;
         try {
             const res = await fetch(`${API}/pedidos/repartidor`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)

@@ -253,6 +253,17 @@ async function cargarCreadosResumen() {
 
 document.getElementById('form-pedido').addEventListener('submit', async (e) => {
     e.preventDefault();
+    // Aviso: sin productos del selector no se descuenta inventario ni suma en reportes
+    if (_productosPedido.length === 0) {
+        const seguir = confirm(
+            '⚠️ No seleccionaste productos de la bodega.\n\n' +
+            'El pedido se creará, pero NO se descontará del inventario al entregarlo ' +
+            'y NO aparecerá en el resumen del Control de Carga.\n\n' +
+            'Lo recomendable es agregar los productos desde "📦 Agregar productos de bodega".\n\n' +
+            '¿Crear el pedido de todos modos?'
+        );
+        if (!seguir) return;
+    }
     const payload = {
         cliente_id: document.getElementById('cliente_id').value,
         contenido: document.getElementById('contenido').value,

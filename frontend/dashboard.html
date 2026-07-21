@@ -121,6 +121,12 @@
                         <!-- Picker de productos en bodega -->
                         <div style="background:#f1f5f9; border-radius:10px; padding:14px; margin-bottom:12px;">
                             <label style="font-size:0.85rem; font-weight:600; color:#475569; display:block; margin-bottom:8px;">📦 Agregar productos de bodega:</label>
+                            <div style="background:#fef3c7; border-left:4px solid #f59e0b; border-radius:8px; padding:10px 12px; margin-bottom:10px; font-size:0.83rem; color:#92400e; line-height:1.45;">
+                                <strong>⚠️ Importante:</strong> arma el pedido <strong>desde aquí</strong>, seleccionando los productos.
+                                Solo así el sistema <strong>descuenta el inventario de la bodega</strong> al entregar y el pedido aparece en el
+                                <strong>resumen del Control de Carga</strong>. Si escribes el contenido a mano, el pedido sí se crea, pero
+                                <strong>no descuenta stock ni suma en los reportes</strong>.
+                            </div>
                             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                                 <select id="prod-bodega-filtro" onchange="pintarSelectorProductos()" style="flex:1; min-width:130px; padding:7px; border-radius:7px; border:1px solid #cbd5e1; font-size:0.9rem;">
                                     <option value="">Todas las bodegas</option>
