@@ -560,6 +560,32 @@ const datosMovil = async (req, res) => {
     }
 };
 
+// ===== Adeudos SOLO de las entregas de ese repartidor =====
+// Muestra a qué clientes les quedó debiendo algo de los pedidos que ÉL entregó
+// (total cobrado menor al total del pedido). No muestra la deuda general.
+const deudasRepartidor = async (req, res) => {
+    const { repId } = req.params;
+    try {
+        const [clientes] = await db.query(`
+            SELECT c.id, c.nombre, c.telefono, c.saldo_deudor,
+                   SUM(p.total - p.monto_cobrado) AS pendiente,
+                   COUNT(*) AS pedidos
+            FROM pedidos p
+            JOIN clientes c ON p.cliente_id = c.id
+            WHERE p.repartidor_id = ?
+              AND p.estatus = 'entregado'
+              AND p.total > p.monto_cobrado
+            GROUP BY c.id, c.nombre, c.telefono, c.saldo_deudor
+            ORDER BY pendiente DESC
+        `, [repId]);
+        const total = clientes.reduce((s, c) => s + Number(c.pendiente), 0);
+        res.json({ total: total.toFixed(2), clientes });
+    } catch (e) {
+        console.error('Error deudas del repartidor:', e);
+        res.status(500).json({ mensaje: 'Error interno del servidor' });
+    }
+};
+
 // ===== #4 · Crear cliente desde la app del repartidor =====
 const crearClienteMovil = async (req, res) => {
     const { nombre, direccion, telefono, limite_credito } = req.body;
@@ -632,6 +658,7 @@ module.exports = {
     crearPedido,
     asignarPedido,
     datosMovil,
+    deudasRepartidor,
     crearClienteMovil,
     crearPedidoRepartidor,
     reasignarPedido,

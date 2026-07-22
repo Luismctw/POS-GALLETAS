@@ -353,7 +353,8 @@
     <!-- Tab: Clientes que deben (#4) -->
     <div id="tab-deudas" class="tab-body" style="display:none;">
         <div style="padding:12px 16px;">
-            <div style="font-weight:800; color:#dc2626; margin-bottom:4px;">💳 Clientes que deben</div>
+            <div style="font-weight:800; color:#dc2626; margin-bottom:4px;">💳 Lo que te quedaron a deber</div>
+            <div style="font-size:0.8rem; color:#94a3b8; margin-bottom:6px;">Solo de tus entregas donde no te pagaron completo.</div>
             <div style="font-size:0.85rem; color:#64748b; margin-bottom:12px;">Total por cobrar: <strong id="deudas-total">$0.00</strong></div>
             <div id="deudas-lista" style="display:flex; flex-direction:column; gap:8px;"></div>
         </div>
@@ -955,25 +956,32 @@
         btn.classList.add('active');
     }
 
-    // #4 · Clientes que deben (para cobrar en el futuro)
+    // Adeudos SOLO de las entregas de este repartidor (lo que le quedaron a deber a él)
     async function cargarDeudasMovil() {
         const wrap = document.getElementById('deudas-lista');
-        // Refresca los datos por si cambiaron
-        try { _datosMovil = await (await fetch(`${API}/pedidos/datos-movil`)).json(); } catch {}
-        const deudores = (_datosMovil.clientes || [])
-            .filter(c => Number(c.saldo_deudor) > 0)
-            .sort((a, b) => Number(b.saldo_deudor) - Number(a.saldo_deudor));
-        const total = deudores.reduce((s, c) => s + Number(c.saldo_deudor), 0);
-        document.getElementById('deudas-total').textContent = fmt$(total);
-        if (!deudores.length) {
-            wrap.innerHTML = '<div style="color:#94a3b8; text-align:center; padding:16px;">Nadie debe dinero 🎉</div>';
-            return;
+        wrap.innerHTML = '<div style="color:#94a3b8; text-align:center; padding:16px;">Cargando...</div>';
+        try {
+            const d = await (await fetch(`${API}/pedidos/deudas-repartidor/${repartidor.id}`)).json();
+            const lista = d.clientes || [];
+            document.getElementById('deudas-total').textContent = fmt$(Number(d.total) || 0);
+            if (!lista.length) {
+                wrap.innerHTML = '<div style="color:#94a3b8; text-align:center; padding:16px;">Nadie te quedó a deber 🎉</div>';
+                return;
+            }
+            wrap.innerHTML = lista.map(c => `
+                <div style="background:#fff; border-radius:10px; padding:12px 16px; box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <strong>${c.nombre}</strong>
+                        <span style="font-weight:800; color:#dc2626;">${fmt$(Number(c.pendiente))}</span>
+                    </div>
+                    <div style="font-size:0.78rem; color:#94a3b8; margin-top:3px;">
+                        De ${c.pedidos} entrega(s) tuya(s)
+                        ${c.telefono ? ` · <a href="tel:${c.telefono}" style="color:#2563eb;">📞 Llamar</a>` : ''}
+                    </div>
+                </div>`).join('');
+        } catch {
+            wrap.innerHTML = '<div style="color:#94a3b8; text-align:center; padding:16px;">Error al cargar</div>';
         }
-        wrap.innerHTML = deudores.map(c => `
-            <div style="background:#fff; border-radius:10px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 4px rgba(0,0,0,0.07);">
-                <strong>${c.nombre}</strong>
-                <span style="font-weight:800; color:#dc2626;">${fmt$(Number(c.saldo_deudor))}</span>
-            </div>`).join('');
     }
 
     document.getElementById('btn-logout').addEventListener('click', () => {
